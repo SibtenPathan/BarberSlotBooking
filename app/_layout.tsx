@@ -27,7 +27,14 @@ export default function RootLayout() {
       <Stack.Screen name="about" options={{ title: 'About' }} />
       <Stack.Screen name="login" options={{ title: 'Login' }} />
       <Stack.Screen name="test" options={{ title: 'Test Styles' }} />
-      <Stack.Screen name="screens/Home" options={{ title: 'Home Page' }} />
+      <Stack.Screen name="Home" options={{ title: 'Home Page' }} />
+      <Stack.Screen name="shopDetail" options={{ title: 'Shop Detail Page' }} />
+      <Stack.Screen name="booking" options={{ title: 'Booking Page' }} />
+      <Stack.Screen name="My Booking Screen" options={{ title: 'My Booking Page' }} />
+      <Stack.Screen name="My Profile Screen" options={{ title: 'My Profile Page' }} />
+      <Stack.Screen name="Notification" options={{ title: 'Notification' }} />
+      <Stack.Screen name="Payment History" options={{ title: 'Payment History' }} />
+      <Stack.Screen name="Chat Screen" options={{ title: 'Chat Screen' }} />
     </Stack>
   );
 }

@@ -17,6 +17,24 @@ export default function Index() {
       <Link href="/screens/Home" className="text-yellow-400 text-xl underline">
         Go to Home Page
       </Link>
+      <Link href="/screens/ShopDetailScreen" className="text-blue-400 text-xl underline mb-2">
+        Go to Shop Detail Screen
+      </Link>
+      <Link href="/screens/BookingScreen" className="text-green-400 text-xl underline mb-2">
+        Go to Booking Screen
+      </Link>
+      <Link href="/screens/Profile" className="text-blue-400 text-xl underline mb-2">
+        Go to My Profile Screen
+      </Link>
+      <Link href="/screens/NotificationScreen" className="text-red-400 text-xl underline mb-2 font-bold">
+        Notificatoin Screen
+      </Link>
+      <Link href="/screens/PaymentHistoryScreen" className="text-blue-400 text-xl underline mb-2">
+        Go to Payment History
+      </Link>
+      <Link href="/screens/InAppChatScreen" className="text-blue-400 text-xl underline mb-2">
+        Go to Chat
+      </Link>
     </View>
   );
 }

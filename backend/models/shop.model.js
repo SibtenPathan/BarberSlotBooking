@@ -20,17 +20,6 @@ const shopSchema = new mongoose.Schema(
       default: ""
     },
 
-    // Services offered by shop
-    services: [
-      {
-        service_id: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "Service",
-          required: true
-        }
-      }
-    ],
-
     // Location info
     location: {
       address: {

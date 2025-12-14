@@ -1,126 +1,230 @@
-import React from "react";
-import { View, Text, SafeAreaView, ScrollView, ImageBackground, TextInput, TouchableOpacity } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
-
-const barbers = [
-  {
-    name: "The Sharp Edge",
-    rating: 4.8,
-    reviews: 120,
-    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuA3D8F9l8FvDoV4B_05vH1bzsYgzHf8NphOgN_WQJSgNKJhTXlKSb_4yZlC-f9-Hu_TbeZMVtzFnHTEB9eUbhy_FZbXILi-mbTAbBOuyfTiYFxl3_YxWk33HiNtXDM5CFz9xdLZceohQ4bOEa4kHfClRCQPneiSqOYTIlQHgMb5U7ndDciNMPavL6c6m9ywauKylCt05V6ngZIZR-r7braB1NoDrdlJ2_YSTjYLTTc7sTn5c8JGFN4RgfqgCqhVVtczuktSETnojkGE",
-  },
-  {
-    name: "Fade Masters",
-    rating: 4.9,
-    reviews: 150,
-    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuBljOrH48zi8M1M8OqgLRXz0wbTu3nZVICxgKBYwuKlCR-nURKcEajs1zHVHThyNoS0QTXTLLZiZkzq_gR5Y06cT9zKDpryrl26YoTczQRT1i3o-II9Nm0wxslTINEwUMV_P-P7rxrrpU93YvEBnOaGiRsVFDK-G_PRVgA8TxwEbJDFsryJwRWGU-p1uICtgipFvfJtXz5IXwKp0mpEmsyrpXQYJRFeGv8aE7D8BLZsirEVw7MjStYz3a_mwULzIPbxdYhSmckw2WGO",
-  },
-  {
-    name: "Clipper Kings",
-    rating: 4.7,
-    reviews: 90,
-    image: "https://lh3.googleusercontent.com/aida-public/AB6AXuApeAMv0-4J1IxkppSN30YATT-by1cRFBX2Wuj78blPuLONgmHZM5Lppt1T0ruT0Z7BQVXra8MkHTeeGWPPsJhYgdwsfK_73ayOYqMO74hD33eIooZkx8P8E3jNz9Amx4AEjD_REivEAvyVhU4L9-w_tpu5kVPKsL_gSe_i0OFEe8YN6vEJUL-L0r-p8pHGWz1NDfXCj1hVE7z5PkzwesnZHxSDNFmGZTFCw_EZ_265jBKCceNpDlPcpKgjck09_vku5qjV_s_4BJEl",
-  },
-];
+import { useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
+import { ActivityIndicator, Alert, ImageBackground, RefreshControl, SafeAreaView, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 const categories = ["Men's Cut", "Beard Trim", "Hair Styling"];
 
+const API_URL = "http://10.20.56.168:5000/api";
+
+interface Shop {
+  _id: string;
+  shopName: string;
+  description: string;
+  location: {
+    address: string;
+    city: string;
+  };
+  images: string[];
+  openTime: string;
+  closeTime: string;
+}
+
 const Home: React.FC = () => {
+  const router = useRouter();
+  const [shops, setShops] = useState<Shop[]>([]);
+  const [filteredShops, setFilteredShops] = useState<Shop[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("All");
+
+  const fetchShops = async () => {
+    try {
+      console.log("Fetching shops from:", `${API_URL}/shops`);
+      const response = await fetch(`${API_URL}/shops`);
+      const data = await response.json();
+      
+      console.log("Response data:", data);
+      
+      if (data.success) {
+        setShops(data.data);
+        setFilteredShops(data.data);
+        console.log("Shops loaded:", data.data.length);
+      } else {
+        console.log("API returned success: false");
+        Alert.alert("Error", "Failed to fetch shops");
+      }
+    } catch (error) {
+      console.error("Error fetching shops:", error);
+      Alert.alert("Network Error", "Could not connect to server. Make sure backend is running.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchShops();
+  }, []);
+
+  useEffect(() => {
+    let filtered = shops;
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      filtered = filtered.filter(shop =>
+        shop.shopName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        shop.location.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        shop.description?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    // Filter by category (placeholder for future implementation)
+    // if (selectedCategory !== "All") {
+    //   filtered = filtered.filter(shop => shop.category === selectedCategory);
+    // }
+
+    setFilteredShops(filtered);
+  }, [searchQuery, selectedCategory, shops]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchShops();
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-background-light dark:bg-background-dark">
-      {/* Header */}
-      <View className="flex-row items-center justify-between px-4 py-3 bg-background-light/80 dark:bg-background-dark/80">
-        <View className="w-8" />
-        <Text className="flex-1 text-center text-lg font-bold text-stone-900 dark:text-stone-100">
-          Home
-        </Text>
-        <TouchableOpacity className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-          <MaterialIcons
-            name="help-outline"
-            size={20}
-            color="#221d10"
-          />
-        </TouchableOpacity>
-      </View>
-
       {/* Search */}
-      <View className="px-4 py-3">
+      <View className="px-4 pt-4 pb-3">
         <View className="relative">
-          <MaterialIcons
-            name="search"
-            size={20}
-            color="#6b7280"
-            className="absolute left-3 top-3"
-          />
+          <View className="absolute left-3 top-1/2 -translate-y-1/2 z-10">
+            <MaterialIcons
+              name="search"
+              size={20}
+              color="#9ca3af"
+            />
+          </View>
           <TextInput
-            placeholder="Search services or barbershops"
+            placeholder="Search barbershops by name or city"
+            placeholderTextColor="#9ca3af"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
             className="w-full rounded-lg bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 py-3 pl-10 pr-4 border border-stone-300 dark:border-stone-700"
           />
         </View>
       </View>
 
-      <ScrollView className="flex-1 space-y-4">
-        {/* Nearby Barbers */}
-        <View className="space-y-2 px-4">
-          <View className="flex-row justify-between items-center">
-            <Text className="text-xl font-bold text-stone-900 dark:text-stone-100">
-              Nearby You
-            </Text>
-            <Text className="text-sm font-semibold text-primary">See All</Text>
-          </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            className="space-x-4 py-2"
-          >
-            {barbers.map((barber, idx) => (
-              <View key={idx} className="w-64 space-y-2">
-                <ImageBackground
-                  source={{ uri: barber.image }}
-                  className="aspect-square w-full rounded-xl"
-                  imageStyle={{ borderRadius: 12 }}
-                />
-                <Text className="font-bold text-stone-900 dark:text-stone-100">
-                  {barber.name}
-                </Text>
-                <Text className="text-sm text-stone-600 dark:text-stone-400">
-                  <Text className="text-primary">★</Text> {barber.rating} ({barber.reviews} reviews)
-                </Text>
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* Categories */}
-        <View className="space-y-2 px-4">
-          <Text className="text-xl font-bold text-stone-900 dark:text-stone-100">Categories</Text>
-          <View className="flex-row flex-wrap gap-2">
-            {categories.map((cat, idx) => (
+      {/* Category Filters */}
+      <View className="px-4 pb-3">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View className="flex-row gap-2">
+            {["All", ...categories].map((cat) => (
               <TouchableOpacity
-                key={idx}
+                key={cat}
+                onPress={() => setSelectedCategory(cat)}
                 className={`px-4 py-2 rounded-full ${
-                  idx === 0
-                    ? "bg-primary/20 dark:bg-primary/30 text-primary"
-                    : "bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300"
+                  selectedCategory === cat
+                    ? "bg-primary"
+                    : "bg-stone-100 dark:bg-stone-800"
                 }`}
               >
-                <Text className="font-semibold text-sm">{cat}</Text>
+                <Text className={`font-semibold text-sm ${
+                  selectedCategory === cat
+                    ? "text-stone-900"
+                    : "text-stone-700 dark:text-stone-300"
+                }`}>
+                  {cat}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
+        </ScrollView>
+      </View>
+
+      <ScrollView 
+        className="flex-1 space-y-4"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {/* Nearby Barbers */}
+        <View className="px-4">
+          <View className="flex-row justify-between items-center mb-4">
+            <Text className="text-xl font-bold text-stone-900 dark:text-stone-100">
+              {searchQuery ? `Search Results (${filteredShops.length})` : "Nearby You"}
+            </Text>
+            {!searchQuery && <Text className="text-sm font-semibold text-primary">See All</Text>}
+          </View>
+          
+          {loading ? (
+            <View className="py-8 items-center">
+              <ActivityIndicator size="large" color="#ecb613" />
+            </View>
+          ) : filteredShops.length === 0 ? (
+            <View className="py-12 items-center bg-stone-100 dark:bg-stone-800 rounded-2xl">
+              <MaterialIcons name="search-off" size={48} color="#9ca3af" />
+              <Text className="text-stone-600 dark:text-stone-400 mt-3 font-semibold">
+                {searchQuery ? "No shops found" : "No shops available"}
+              </Text>
+              <Text className="text-stone-500 dark:text-stone-500 text-sm mt-1">
+                {searchQuery ? "Try a different search term" : "Check back later"}
+              </Text>
+            </View>
+          ) : (
+            <View className="space-y-4">
+              {filteredShops.map((shop) => (
+                <TouchableOpacity 
+                  key={shop._id} 
+                  className="bg-white dark:bg-stone-800 rounded-xl overflow-hidden shadow-sm"
+                  onPress={() => router.push(`/screens/ShopDetailScreen?shopId=${shop._id}`)}
+                >
+                  <ImageBackground
+                    source={{ 
+                      uri: shop.images?.[0] || "https://via.placeholder.com/300x300?text=No+Image"
+                    }}
+                    className="w-full h-48"
+                  >
+                    <View className="absolute top-3 right-3 bg-primary rounded-full px-3 py-1">
+                      <Text className="text-xs font-bold text-stone-900">Open</Text>
+                    </View>
+                    <View className="absolute bottom-2 left-2 right-2 bg-black/60 rounded-lg p-2">
+                      <View className="flex-row items-center">
+                        <MaterialIcons name="access-time" size={14} color="#fff" />
+                        <Text className="text-xs text-white font-semibold ml-1">
+                          {shop.openTime} - {shop.closeTime}
+                        </Text>
+                      </View>
+                    </View>
+                  </ImageBackground>
+                  
+                  <View className="p-4">
+                    <Text className="text-lg font-bold text-stone-900 dark:text-stone-100 mb-2">
+                      {shop.shopName}
+                    </Text>
+                    
+                    <View className="flex-row items-center mb-2">
+                      <MaterialIcons name="location-on" size={16} color="#ecb613" />
+                      <Text className="text-xs text-stone-600 dark:text-stone-400 ml-1 flex-1">
+                        {shop.location.address}, {shop.location.city}
+                      </Text>
+                    </View>
+                    
+                    {shop.description && (
+                      <Text className="text-xs text-stone-500 dark:text-stone-500 mb-3" numberOfLines={2}>
+                        {shop.description}
+                      </Text>
+                    )}
+                    
+                    <View className="flex-row items-center justify-between pt-3 border-t border-stone-200 dark:border-stone-700">
+                      <View className="flex-row items-center">
+                        <MaterialIcons name="star" size={16} color="#ecb613" />
+                        <Text className="text-sm font-bold text-stone-900 dark:text-stone-100 ml-1">4.8</Text>
+                        <Text className="text-xs text-stone-500 dark:text-stone-500 ml-1">(120 reviews)</Text>
+                      </View>
+                      <View className="flex-row items-center">
+                        <MaterialIcons name="arrow-forward" size={16} color="#ecb613" />
+                      </View>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
 
-        {/* Map / Find Us */}
-        <View className="space-y-2 px-4 pb-24">
-          <Text className="text-xl font-bold text-stone-900 dark:text-stone-100">
-            Find Us
-          </Text>
-          <ImageBackground
-            source={{ uri: "https://lh3.googleusercontent.com/aida-public/AB6AXuDXsTCPAKCqWDBp9nvxmgKOUVZv5gD56j-JbUvu3jfkbgvyef1uTIDAPKRY2NfEXAifwLNJjyx2KgiA_wlop5Rv0diUNeLBHz-nkVTCIoUx8bLz_-uhG8dFwp0yD6wDArvodIEZu_2p3sqT3ZjOs3_xseLsyZSFtDt7Y2FAMJ269qebaxnC1MQag8f5BYM3fo7AUCzQsxxKGUr3ddc1HPwjAHnPlF0zXzCqnIZNAc4UHojDCBs3vvagTPjt9Lrkk-ttmqsQvDGSTmyq" }}
-            className="w-full aspect-video rounded-xl"
-            imageStyle={{ borderRadius: 12 }}
-          />
-        </View>
+        {/* Bottom Spacing */}
+        <View className="h-24" />
       </ScrollView>
 
       {/* Floating Action Button */}

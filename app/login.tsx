@@ -16,7 +16,7 @@ import {
 } from "react-native";
 
 // Use your computer's local IP address for Expo testing
-const API_URL = "http://192.168.1.48:5000/api/auth";
+const API_URL = "http://10.20.56.168:5000/api/auth";
 
 const Login: React.FC = () => {
   const router = useRouter();

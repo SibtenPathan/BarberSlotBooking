@@ -1,139 +1,279 @@
-import React, { useState } from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  ImageBackground,
-  SafeAreaView,
-  Alert,
-} from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { format } from "date-fns";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
+import {
+  Alert,
+  ImageBackground,
+  SafeAreaView,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useAuth } from "../contexts/AuthContext";
 
-type Service = { id: string; name: string; price: number };
-type Barber = { id: string; name: string; title?: string; image: string };
+interface Service {
+  _id: string;
+  name: string;
+  description: string;
+  price: number;
+  duration: number;
+  category: string;
+}
 
-const SERVICES: Service[] = [
-  { id: "haircut", name: "Haircut", price: 30 },
-  { id: "beard", name: "Beard Trim", price: 12 },
-  { id: "color", name: "Hair Color", price: 45 },
-  { id: "style", name: "Styling", price: 20 },
-];
+interface Barber {
+  _id: string;
+  user_id: {
+    FirstName: string;
+    LastName: string;
+    profileImage?: string;
+  };
+  experience: number;
+  specialization: string[];
+  availability: {
+    date: Date;
+    slots: {
+      time: string;
+      isBooked: boolean;
+    }[];
+  }[];
+}
 
-const BARBERS: Barber[] = [
-  {
-    id: "ethan",
-    name: "Ethan",
-    title: "Senior Barber",
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuBJ8yM_8YHomO3yxrYkvCh5QoabW6d-OsFfqAyVeelWx_TXx-9osjnshq9ftBH2hfxGCWhAViwBN97LdKeNWZRIjcRy3b_Q0wSVZhmjpsWiq4Pl7RIkjfEMvAtcCDrL6_9wfXZaPIUVGXwIquZ0RvMKkk9Ct-W38rn8A_dDR4bR2hdK_JjM-7oJcsmXBY-TKx-ollraHpGoXukCfTp-BOa1EqHeO-9L_fMMXVww-hW64iulHj6yuU0LTb0YMBecul1eWjqZRfVNGCC7",
-  },
-  {
-    id: "noah",
-    name: "Noah",
-    title: "Barber",
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuBILB95Ef7v-0xvvE5YrMldMFMB7n92YROy4oXUHP58iL0c7HJXBxi9nI7fowiKczS9QsinfP19mKBTadTZ5_P89kbQ7z8K-zEzQeUjiKlHXAKrDPIDv43DuuhY9TJ8TOeS0zbjukxGvKLlwDxDJIcDYQ4FccKVuSOLcbmFHFOZp1vMvhYwlqCtQBSozEA8KTBAFlHLpYC_4SHjsaBYm1jQDZ_LOEl_d2GDwPaFb4xXkiPO1288hujdzdhBChJuBOSAowNFjC99Mtk9",
-  },
-  {
-    id: "liam",
-    name: "Liam",
-    title: "Junior Barber",
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuDbAADJphrq4Yu7JyJKpfcnc-9gSYMF_NCOKuHlZvajnFQum6VBZtXSxO2X0n7_o1pVwPUl6KxdjdlGGj7LTYj8cN35jjFLYZfeM-JWsAMlWrhrbI6mPPyCWENE3LGlud6OGazYIYQVYQq2sauPbjHkRDyWfHM0ZlIVu3ZJ9atCYw8ztLkwoWf7oUvTyaqEuSMk7ecVNGab1H6FUIN8ejyhOxoWXh2T7ZtCiGHjCCwCNmLRsxHH9vPcqJzKuxLmvrR3knm-1u8Z2glV",
-  },
-];
-
-const AVAILABLE_TIMES = ["10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM", "12:00 PM"];
+const API_URL = "http://10.107.204.168:5000/api";
 
 export default function BookingScreen() {
-  const [selectedServiceId, setSelectedServiceId] = useState<string>(SERVICES[0].id);
-  const [selectedBarberId, setSelectedBarberId] = useState<string>(BARBERS[0].id);
+  const router = useRouter();
+  const params = useLocalSearchParams();
+  const { user, loading } = useAuth();
+  
+  const [services, setServices] = useState<Service[]>([]);
+  const [barbers, setBarbers] = useState<Barber[]>([]);
+  const [shopName, setShopName] = useState<string>("");
+  const [shopId, setShopId] = useState<string>("");
+  const [selectedBarberId, setSelectedBarberId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [selectedTime, setSelectedTime] = useState<string | null>(AVAILABLE_TIMES[1]); // default 10:30
+  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const [isBooking, setIsBooking] = useState(false);
 
-  const service = SERVICES.find((s) => s.id === selectedServiceId)!;
-  const barber = BARBERS.find((b) => b.id === selectedBarberId)!;
+  // Debug auth state
+  useEffect(() => {
+    console.log("Auth state - Loading:", loading, "User:", user);
+  }, [loading, user]);
 
-  const serviceFee = 5;
-  const total = service.price + serviceFee;
+  useEffect(() => {
+    // Parse params
+    if (params.services && typeof params.services === 'string') {
+      const parsedServices = JSON.parse(params.services);
+      setServices(parsedServices);
+    }
+    if (params.barbers && typeof params.barbers === 'string') {
+      const parsedBarbers = JSON.parse(params.barbers);
+      setBarbers(parsedBarbers);
+      if (parsedBarbers.length > 0) {
+        setSelectedBarberId(parsedBarbers[0]._id);
+      }
+    }
+    if (params.shopName) {
+      setShopName(params.shopName as string);
+    }
+    if (params.shopId) {
+      setShopId(params.shopId as string);
+    }
+  }, [params.services, params.barbers, params.shopName, params.shopId]);
 
-  function onConfirm() {
-    // Replace with navigation / API call in your app
-    Alert.alert(
-      "Booking Confirmed",
-      `Service: ${service.name}\nBarber: ${barber.name}\nDate: ${format(selectedDate, "MMM d, yyyy")}\nTime: ${selectedTime}\nTotal: $${total}`
-    );
-  }
+  // Refresh barber data to get updated slot availability
+  const refreshBarberData = async () => {
+    if (!shopId) return;
+    try {
+      const response = await fetch(`${API_URL}/shops/${shopId}`);
+      const data = await response.json();
+      if (data.success && data.data.barbers) {
+        setBarbers(data.data.barbers);
+      }
+    } catch (error) {
+      console.error("Error refreshing barber data:", error);
+    }
+  };
 
-  // small calendar: render 30 days from today
+  const selectedBarber = barbers.find(b => b._id === selectedBarberId);
+  
+  // Find slots for selected date
+  const selectedDateStr = selectedDate.toDateString();
+  const dateAvailability = selectedBarber?.availability.find(
+    av => new Date(av.date).toDateString() === selectedDateStr
+  );
+  // Show all slots (both available and booked) so user can see what's taken
+  const allSlots = dateAvailability?.slots || [];
+  const availableSlots = allSlots.filter(s => !s.isBooked);
+  
+  // Generate calendar days (30 days from today)
   const calendarDays = Array.from({ length: 30 }).map((_, i) => {
     const d = new Date();
     d.setDate(d.getDate() + i);
     return d;
   });
 
+  const serviceFee = 5;
+  const servicesTotal = services.reduce((sum, s) => sum + s.price, 0);
+  const total = servicesTotal + serviceFee;
+
+  const handleConfirmBooking = async () => {
+    if (!selectedBarberId) {
+      Alert.alert("Select Barber", "Please select a barber");
+      return;
+    }
+    if (!selectedTime) {
+      Alert.alert("Select Time", "Please select a time slot");
+      return;
+    }
+
+    console.log("Current user:", user);
+    
+    if (!user) {
+      Alert.alert(
+        "Authentication Required", 
+        "Please login first to book an appointment",
+        [
+          {
+            text: "Go to Login",
+            onPress: () => router.push("/login")
+          },
+          {
+            text: "Cancel",
+            style: "cancel"
+          }
+        ]
+      );
+      return;
+    }
+
+    setIsBooking(true);
+
+    try {
+      // Handle both _id and id for backward compatibility with old sessions
+      const userId = user._id || (user as any).id;
+      
+      const bookingData = {
+        user_id: userId,
+        shop_id: shopId,
+        barber_id: selectedBarberId,
+        services: services.map(s => s._id),
+        date: selectedDate.toISOString(),
+        slot_time: selectedTime,
+        payment: {
+          method: "cash",
+          amount: total,
+          status: "pending"
+        }
+      };
+
+      console.log("Creating booking:", bookingData);
+
+      const response = await fetch(`${API_URL}/bookings`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(bookingData)
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Refresh barber data to show updated slot availability
+        await refreshBarberData();
+        // Clear selected time so booked slot won't be selected
+        setSelectedTime(null);
+        
+        Alert.alert(
+          "Booking Confirmed! 🎉",
+          `Shop: ${shopName}\nBarber: ${selectedBarber?.user_id.FirstName} ${selectedBarber?.user_id.LastName}\nServices: ${services.map(s => s.name).join(", ")}\nDate: ${format(selectedDate, "MMM d, yyyy")}\nTime: ${selectedTime}\nTotal: $${total}\n\nYour booking has been confirmed!`,
+          [
+            {
+              text: "OK",
+              onPress: () => router.back()
+            }
+          ]
+        );
+      } else {
+        Alert.alert("Booking Failed", data.message || "Unable to create booking");
+      }
+    } catch (error) {
+      console.error("Booking error:", error);
+      Alert.alert("Error", "Failed to create booking. Please try again.");
+    } finally {
+      setIsBooking(false);
+    }
+  };
+
   return (
-    <SafeAreaView className="flex-1 bg-background-dark">
+    <SafeAreaView className="flex-1 bg-stone-50 dark:bg-stone-900">
       {/* Header */}
-      <View className="flex-row items-center p-4">
-        <TouchableOpacity className="w-10 h-10 items-center justify-center">
-          <MaterialIcons name="arrow-back-ios" size={20} color="#fff" />
+      <View className="flex-row items-center p-4 bg-white dark:bg-stone-800">
+        <TouchableOpacity className="w-10 h-10 items-center justify-center" onPress={() => router.back()}>
+          <MaterialIcons name="arrow-back" size={24} color="#ecb613" />
         </TouchableOpacity>
-        <Text className="flex-1 text-center text-lg font-bold text-white -ml-10">
+        <Text className="flex-1 text-center text-lg font-bold text-stone-900 dark:text-stone-100 -ml-10">
           Book Appointment
         </Text>
       </View>
 
-      <ScrollView className="flex-1 pb-40">
-        <View className="p-4 space-y-6">
-          {/* Select Service */}
+      <ScrollView className="flex-1">
+        <View className="p-4 gap-4">
+          
+          {/* Selected Services */}
           <View>
-            <Text className="text-base font-bold text-white mb-3">Select Service</Text>
-            <View className="flex-row flex-wrap gap-3">
-              {SERVICES.map((s) => {
-                const active = s.id === selectedServiceId;
-                return (
-                  <TouchableOpacity
-                    key={s.id}
-                    onPress={() => setSelectedServiceId(s.id)}
-                    className={`px-4 py-2 rounded-lg ${
-                      active ? "bg-primary text-black" : "bg-primary/20 text-white/90"
-                    }`}
-                    >
-                    <Text className={`${active ? "font-bold" : "font-medium"}`}>{s.name}</Text>
-                  </TouchableOpacity>
-                );
-              })}
+            <Text className="text-base font-bold text-stone-900 dark:text-stone-100 mb-3">Selected Services</Text>
+            <View className="bg-white dark:bg-stone-800 rounded-xl p-4 gap-2">
+              {services.map((service) => (
+                <View key={service._id} className="flex-row justify-between items-center">
+                  <View className="flex-1">
+                    <Text className="font-semibold text-stone-900 dark:text-stone-100">{service.name}</Text>
+                    <Text className="text-xs text-stone-500 dark:text-stone-400">{service.duration} mins</Text>
+                  </View>
+                  <Text className="font-bold text-primary">${service.price}</Text>
+                </View>
+              ))}
             </View>
           </View>
 
           {/* Select Barber */}
           <View>
-            <Text className="text-base font-bold text-white mb-3">Select Barber</Text>
+            <Text className="text-base font-bold text-stone-900 dark:text-stone-100 mb-3">Select Barber</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              className="-mx-4 px-4"
+              className="gap-3"
             >
-              {BARBERS.map((b) => {
-                const active = b.id === selectedBarberId;
+              {barbers.map((barber) => {
+                const active = barber._id === selectedBarberId;
                 return (
                   <TouchableOpacity
-                    key={b.id}
-                    onPress={() => setSelectedBarberId(b.id)}
-                    className="flex items-center gap-2 flex-shrink-0 w-24 mr-4"
+                    key={barber._id}
+                    onPress={() => {
+                      setSelectedBarberId(barber._id);
+                      setSelectedTime(null); // Reset time when barber changes
+                    }}
+                    className={`items-center w-24 mr-2 p-3 rounded-xl ${
+                      active ? "bg-primary/20 border-2 border-primary" : "bg-white dark:bg-stone-800"
+                    }`}
                   >
-                    <ImageBackground
-                      source={{ uri: b.image }}
-                      className={`w-24 h-24 rounded-full ${active ? "ring-2 ring-primary" : ""}`}
-                      imageStyle={{ borderRadius: 999 }}
-                    />
-                    <View className="items-center">
-                      <Text className={`text-sm ${active ? "font-bold text-white" : "text-white/90"}`}>{b.name}</Text>
-                      <Text className="text-xs text-white/60">{b.title}</Text>
+                    <View className="w-16 h-16 bg-primary/20 rounded-full items-center justify-center mb-2">
+                      {barber.user_id.profileImage ? (
+                        <ImageBackground
+                          source={{ uri: barber.user_id.profileImage }}
+                          className="w-16 h-16 rounded-full"
+                          imageStyle={{ borderRadius: 32 }}
+                        />
+                      ) : (
+                        <MaterialIcons name="person" size={32} color="#ecb613" />
+                      )}
                     </View>
+                    <Text className={`text-sm text-center ${active ? "font-bold text-stone-900 dark:text-stone-100" : "text-stone-700 dark:text-stone-300"}`}>
+                      {barber.user_id.FirstName}
+                    </Text>
+                    <Text className="text-xs text-stone-500 dark:text-stone-400 text-center">{barber.experience}y exp</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -141,129 +281,172 @@ export default function BookingScreen() {
           </View>
 
           {/* Select Date */}
-          <View>
-            <Text className="text-base font-bold text-white mb-3">Select Date & Time</Text>
+          {selectedBarberId && (
+            <View>
+              <Text className="text-base font-bold text-stone-900 dark:text-stone-100 mb-3">Select Date</Text>
+              <View className="bg-white dark:bg-stone-800 rounded-xl p-4">
+                <View className="flex-row items-center justify-between mb-3">
+                  <TouchableOpacity
+                    onPress={() => {
+                      const prev = new Date(selectedDate);
+                      prev.setDate(prev.getDate() - 7);
+                      if (prev >= new Date()) {
+                        setSelectedDate(prev);
+                        setSelectedTime(null);
+                      }
+                    }}
+                    className="w-8 h-8 items-center justify-center rounded-full"
+                  >
+                    <MaterialIcons name="chevron-left" size={24} color="#ecb613" />
+                  </TouchableOpacity>
 
-            <View className="rounded-xl p-3 bg-primary/10">
-              <View className="flex-row items-center justify-between mb-3">
-                <TouchableOpacity
-                  onPress={() => {
-                    const prev = new Date(selectedDate);
-                    prev.setDate(prev.getDate() - 30);
-                    setSelectedDate(prev);
-                  }}
-                  className="w-8 h-8 items-center justify-center rounded-full"
-                >
-                  <MaterialIcons name="chevron-left" size={20} color="#fff" />
-                </TouchableOpacity>
+                  <Text className="text-sm font-bold text-stone-900 dark:text-stone-100">
+                    {format(selectedDate, "MMMM yyyy")}
+                  </Text>
 
-                <Text className="text-sm font-bold text-white">
-                  {format(selectedDate, "MMMM yyyy")}
-                </Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      const next = new Date(selectedDate);
+                      next.setDate(next.getDate() + 7);
+                      const maxDate = new Date();
+                      maxDate.setDate(maxDate.getDate() + 30);
+                      if (next <= maxDate) {
+                        setSelectedDate(next);
+                        setSelectedTime(null);
+                      }
+                    }}
+                    className="w-8 h-8 items-center justify-center rounded-full"
+                  >
+                    <MaterialIcons name="chevron-right" size={24} color="#ecb613" />
+                  </TouchableOpacity>
+                </View>
 
-                <TouchableOpacity
-                  onPress={() => {
-                    const next = new Date(selectedDate);
-                    next.setDate(next.getDate() + 30);
-                    setSelectedDate(next);
-                  }}
-                  className="w-8 h-8 items-center justify-center rounded-full"
-                >
-                  <MaterialIcons name="chevron-right" size={20} color="#fff" />
-                </TouchableOpacity>
-              </View>
-
-              {/* simple horizontal date row (scrollable) */}
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="py-2">
-                {calendarDays.map((d) => {
-                  const isSelected =
-                    d.toDateString() === selectedDate.toDateString();
-                  return (
-                    <TouchableOpacity
-                      key={d.toISOString()}
-                      onPress={() => setSelectedDate(d)}
-                      className={`w-14 h-14 mr-3 rounded-full items-center justify-center ${
-                        isSelected ? "bg-primary" : "hover:bg-primary/20"
-                      }`}
-                    >
-                      <Text className={`text-sm ${isSelected ? "font-bold text-black" : "text-white"}`}>
-                        {format(d, "d")}
-                      </Text>
-                      <Text className={`text-xs ${isSelected ? "text-black" : "text-white/70"}`}>
-                        {format(d, "EEE")}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-
-              {/* Time slots */}
-              <View className="flex-row justify-center gap-2 mt-4 flex-wrap">
-                {AVAILABLE_TIMES.map((t) => {
-                  const active = t === selectedTime;
-                  return (
-                    <TouchableOpacity
-                      key={t}
-                      onPress={() => setSelectedTime(t)}
-                      className={`px-4 py-2 rounded-lg ${
-                        active ? "bg-primary text-black" : "bg-primary/20 text-white/80"
-                      }`}
-                    >
-                      <Text className={`${active ? "font-bold" : "font-medium"}`}>{t}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} className="py-2">
+                  {calendarDays.map((day) => {
+                    const isSelected = day.toDateString() === selectedDate.toDateString();
+                    return (
+                      <TouchableOpacity
+                        key={day.toISOString()}
+                        onPress={() => {
+                          setSelectedDate(day);
+                          setSelectedTime(null);
+                        }}
+                        className={`w-14 h-14 mr-3 rounded-full items-center justify-center ${
+                          isSelected ? "bg-primary" : "bg-stone-100 dark:bg-stone-700"
+                        }`}
+                      >
+                        <Text className={`text-sm ${isSelected ? "font-bold text-stone-900" : "text-stone-900 dark:text-stone-100"}`}>
+                          {format(day, "d")}
+                        </Text>
+                        <Text className={`text-xs ${isSelected ? "text-stone-900" : "text-stone-500 dark:text-stone-400"}`}>
+                          {format(day, "EEE")}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
               </View>
             </View>
-          </View>
+          )}
+
+          {/* Select Time Slot */}
+          {selectedBarberId && selectedDate && (
+            <View>
+              <Text className="text-base font-bold text-stone-900 dark:text-stone-100 mb-3">
+                Select Time Slot - {format(selectedDate, "MMM d, yyyy")}
+              </Text>
+              <View className="bg-white dark:bg-stone-800 rounded-xl p-4">
+                {allSlots.length > 0 ? (
+                  <View className="flex-row flex-wrap gap-2">
+                    {allSlots.map((slot, idx) => {
+                      const active = slot.time === selectedTime;
+                      const isBooked = slot.isBooked;
+                      return (
+                        <TouchableOpacity
+                          key={idx}
+                          onPress={() => !isBooked && setSelectedTime(slot.time)}
+                          disabled={isBooked}
+                          className={`px-4 py-3 rounded-lg border-2 ${
+                            isBooked
+                              ? "bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700 opacity-50"
+                              : active 
+                              ? "bg-primary border-primary" 
+                              : "bg-stone-50 dark:bg-stone-700 border-stone-200 dark:border-stone-600"
+                          }`}
+                        >
+                          <Text className={`text-sm font-semibold ${
+                            isBooked 
+                              ? "text-red-600 dark:text-red-400 line-through" 
+                              : active 
+                              ? "text-stone-900" 
+                              : "text-stone-700 dark:text-stone-300"
+                          }`}>
+                            {slot.time}
+                          </Text>
+                          {isBooked && (
+                            <Text className="text-xs text-red-600 dark:text-red-400 mt-1">Booked</Text>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <Text className="text-stone-500 dark:text-stone-400 text-center py-4">No slots available for this date</Text>
+                )}
+                {availableSlots.length === 0 && allSlots.length > 0 && (
+                  <Text className="text-red-600 dark:text-red-400 text-center py-2 text-sm">All slots are booked for this date</Text>
+                )}
+              </View>
+            </View>
+          )}
 
           {/* Payment Summary */}
           <View>
-            <Text className="text-base font-bold text-white mb-3">Payment Summary</Text>
-            <View className="space-y-2 text-sm">
+            <Text className="text-base font-bold text-stone-900 dark:text-stone-100 mb-3">Payment Summary</Text>
+            <View className="bg-white dark:bg-stone-800 rounded-xl p-4 gap-2">
+              {services.map((service) => (
+                <View key={service._id} className="flex-row justify-between">
+                  <Text className="text-stone-600 dark:text-stone-400">{service.name}</Text>
+                  <Text className="font-medium text-stone-900 dark:text-stone-100">${service.price}</Text>
+                </View>
+              ))}
               <View className="flex-row justify-between">
-                <Text className="text-white/60">Service ({service.name})</Text>
-                <Text className="font-medium text-white">${service.price}</Text>
+                <Text className="text-stone-600 dark:text-stone-400">Service Fee</Text>
+                <Text className="font-medium text-stone-900 dark:text-stone-100">${serviceFee}</Text>
               </View>
+              <View className="border-t border-stone-200 dark:border-stone-700 my-2" />
               <View className="flex-row justify-between">
-                <Text className="text-white/60">Service Fee</Text>
-                <Text className="font-medium text-white">${serviceFee}</Text>
-              </View>
-              <View className="border-t border-white/20 my-2" />
-              <View className="flex-row justify-between font-bold">
-                <Text className="text-white">Total</Text>
-                <Text className="text-white">${total}</Text>
+                <Text className="font-bold text-stone-900 dark:text-stone-100">Total</Text>
+                <Text className="font-bold text-primary text-lg">${total}</Text>
               </View>
             </View>
           </View>
+
+          <View className="h-24" />
         </View>
       </ScrollView>
 
       {/* Footer / Confirm */}
-      <View className="absolute bottom-0 left-0 right-0 bg-background-dark/90 border-t border-primary/20">
+      <View className="absolute bottom-0 left-0 right-0 bg-white dark:bg-stone-800 border-t border-stone-200 dark:border-stone-700">
         <View className="p-4">
           <TouchableOpacity
-            onPress={onConfirm}
-            className="w-full h-12 px-5 rounded-lg bg-primary items-center justify-center"
+            onPress={handleConfirmBooking}
+            className="w-full h-14 px-5 rounded-xl bg-primary items-center justify-center shadow-lg"
+            disabled={!selectedBarberId || !selectedTime || isBooking}
           >
-            <Text className="font-bold text-black text-base">Confirm Booking</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View className="flex-row justify-around items-center px-4 pb-4 pt-2 bg-primary/10">
-          <TouchableOpacity className="flex flex-col items-center gap-1">
-            <MaterialIcons name="home" size={20} color="#fff" />
-            <Text className="text-xs text-white/60">Home</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity className="flex flex-col items-center gap-1">
-            <MaterialIcons name="calendar-month" size={20} color="#ecb613" />
-            <Text className="text-xs text-primary font-bold">Bookings</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity className="flex flex-col items-center gap-1">
-            <MaterialIcons name="person" size={20} color="#fff" />
-            <Text className="text-xs text-white/60">Profile</Text>
+            <View className="flex-row items-center">
+              {isBooking ? (
+                <>
+                  <MaterialIcons name="hourglass-empty" size={20} color="#221d10" />
+                  <Text className="font-bold text-stone-900 text-base ml-2">Processing...</Text>
+                </>
+              ) : (
+                <>
+                  <MaterialIcons name="check-circle" size={20} color="#221d10" />
+                  <Text className="font-bold text-stone-900 text-base ml-2">Confirm Booking - ${total}</Text>
+                </>
+              )}
+            </View>
           </TouchableOpacity>
         </View>
       </View>

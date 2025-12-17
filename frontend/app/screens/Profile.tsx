@@ -1,15 +1,16 @@
+import { MaterialIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-  View,
-  Text,
-  SafeAreaView,
-  ScrollView,
-  TouchableOpacity,
-  ImageBackground,
-  Switch,
-  Alert,
+    Alert,
+    ImageBackground,
+    SafeAreaView,
+    ScrollView,
+    Switch,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
-import { MaterialIcons } from "@expo/vector-icons";
 
 /**
  * Profile.tsx
@@ -28,6 +29,7 @@ const avatarUrl =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuBxozkaHythRzKSGCA-LOHiGXbNheUdXhx-bfHlotkPM_-mVtJ2c4F1K5o5c07fYg_GG22nKVibYoStNOsD11G2BF7A0ErqG3C64ITDzrwsIb-LR6DOqvntHjIxs9QqIecRkDY50STlINrrgjhkOzNt4hP2jgi4xBMegaSXuwy_XIofmrUIla0H-nM8ao2-wE42wf-HyBQnW_VJyQi7cWFtCQmabH3lkH72yeBZmXb6a82V_Ziqz_BZTajc7N0ZcA-pvt2M22S-s6kP";
 
 const Profile: React.FC = () => {
+  const router = useRouter();
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(true);
 
   function onToggleNotifications(value: boolean) {
@@ -146,7 +148,7 @@ const Profile: React.FC = () => {
         <View className="flex-row justify-around items-center p-2">
           <TouchableOpacity
             className="flex flex-col items-center gap-1 p-2"
-            onPress={() => Alert.alert("Navigate", "Go to Home (implement navigation)")}
+            onPress={() => router.push("/screens/Home")}
           >
             <MaterialIcons name="home" size={22} color="#6b7280" />
             <Text className="text-xs text-black/60 dark:text-white/60">Home</Text>
@@ -154,7 +156,7 @@ const Profile: React.FC = () => {
 
           <TouchableOpacity
             className="flex flex-col items-center gap-1 p-2"
-            onPress={() => Alert.alert("Navigate", "Go to Bookings (implement navigation)")}
+            onPress={() => router.push("/screens/MyBookingScreen")}
           >
             <MaterialIcons name="calendar-month" size={22} color="#6b7280" />
             <Text className="text-xs text-black/60 dark:text-white/60">Bookings</Text>

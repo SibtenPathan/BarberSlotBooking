@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, ImageBackground, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const API_URL = "http://10.20.56.168:5000/api";
+const API_URL = "http://10.107.204.168:5000/api";
 
 interface Slot {
   time: string;
@@ -62,7 +62,7 @@ const BarberDetailScreen = () => {
   const { shopId } = useLocalSearchParams();
   const [shop, setShop] = useState<Shop | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedBarber, setSelectedBarber] = useState<string | null>(null);
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
 
   useEffect(() => {
     fetchShopDetails();
@@ -86,6 +86,36 @@ const BarberDetailScreen = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const toggleServiceSelection = (serviceId: string) => {
+    setSelectedServices(prev => {
+      if (prev.includes(serviceId)) {
+        return prev.filter(id => id !== serviceId);
+      } else {
+        return [...prev, serviceId];
+      }
+    });
+  };
+
+  const handleBookAppointment = () => {
+    if (selectedServices.length === 0) {
+      Alert.alert("Select Services", "Please select at least one service to continue");
+      return;
+    }
+
+    // Get selected services data
+    const selectedServicesData = shop?.services?.filter(s => selectedServices.includes(s._id)) || [];
+    
+    router.push({
+      pathname: "/screens/BookingScreen",
+      params: {
+        shopId: shop?._id,
+        shopName: shop?.shopName,
+        services: JSON.stringify(selectedServicesData),
+        barbers: JSON.stringify(shop?.barbersDetails || [])
+      }
+    });
   };
 
   if (loading) {
@@ -207,29 +237,47 @@ const BarberDetailScreen = () => {
           <View className="mb-4">
             <Text className="text-lg font-bold text-stone-900 dark:text-stone-100 mb-3">Services</Text>
             <View className="gap-2">
-              {shop.services.map((service) => (
-                <View key={service._id} className="bg-white dark:bg-stone-800 rounded-xl p-4">
-                  <View className="flex-row justify-between items-start">
-                    <View className="flex-1">
-                      <Text className="font-semibold text-stone-900 dark:text-stone-100 text-base">
-                        {service.name}
-                      </Text>
-                      <Text className="text-sm text-stone-500 dark:text-stone-500 mt-1">
-                        {service.description}
-                      </Text>
-                      <View className="flex-row items-center mt-2">
-                        <MaterialIcons name="access-time" size={14} color="#9ca3af" />
-                        <Text className="text-xs text-stone-500 dark:text-stone-500 ml-1">
-                          {service.duration} mins
+              {shop.services.map((service) => {
+                const isSelected = selectedServices.includes(service._id);
+                return (
+                  <TouchableOpacity 
+                    key={service._id} 
+                    className={`bg-white dark:bg-stone-800 rounded-xl p-4 border-2 ${
+                      isSelected ? 'border-primary' : 'border-transparent'
+                    }`}
+                    onPress={() => toggleServiceSelection(service._id)}
+                  >
+                    <View className="flex-row justify-between items-start">
+                      <View className="flex-1">
+                        <View className="flex-row items-center">
+                          <View className={`w-5 h-5 rounded border-2 mr-3 items-center justify-center ${
+                            isSelected ? 'bg-primary border-primary' : 'border-stone-300 dark:border-stone-600'
+                          }`}>
+                            {isSelected && (
+                              <MaterialIcons name="check" size={16} color="#221d10" />
+                            )}
+                          </View>
+                          <Text className="font-semibold text-stone-900 dark:text-stone-100 text-base">
+                            {service.name}
+                          </Text>
+                        </View>
+                        <Text className="text-sm text-stone-500 dark:text-stone-500 mt-1 ml-8">
+                          {service.description}
                         </Text>
+                        <View className="flex-row items-center mt-2 ml-8">
+                          <MaterialIcons name="access-time" size={14} color="#9ca3af" />
+                          <Text className="text-xs text-stone-500 dark:text-stone-500 ml-1">
+                            {service.duration} mins
+                          </Text>
+                        </View>
+                      </View>
+                      <View className="ml-3">
+                        <Text className="font-bold text-primary text-lg">${service.price}</Text>
                       </View>
                     </View>
-                    <View className="ml-3">
-                      <Text className="font-bold text-primary text-lg">${service.price}</Text>
-                    </View>
-                  </View>
-                </View>
-              ))}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
         )}
@@ -239,86 +287,38 @@ const BarberDetailScreen = () => {
           <View className="mb-4">
             <Text className="text-lg font-bold text-stone-900 dark:text-stone-100 mb-3">Our Barbers</Text>
             <View className="gap-3">
-              {shop.barbersDetails.map((barber) => {
-                const todaySlots = barber.availability[0]?.slots || [];
-                const availableSlots = todaySlots.filter(slot => !slot.isBooked);
-                const isExpanded = selectedBarber === barber._id;
-
-                return (
-                  <View key={barber._id} className="bg-white dark:bg-stone-800 rounded-xl overflow-hidden">
-                    {/* Barber Header */}
-                    <TouchableOpacity 
-                      className="p-4"
-                      onPress={() => setSelectedBarber(isExpanded ? null : barber._id)}
-                    >
-                      <View className="flex-row items-center">
-                        <View className="w-14 h-14 bg-primary/20 rounded-full items-center justify-center">
-                          {barber.user_id.profileImage ? (
-                            <ImageBackground
-                              source={{ uri: barber.user_id.profileImage }}
-                              className="w-14 h-14 rounded-full"
-                              imageStyle={{ borderRadius: 28 }}
-                            />
-                          ) : (
-                            <MaterialIcons name="person" size={28} color="#ecb613" />
-                          )}
-                        </View>
-                        <View className="ml-3 flex-1">
-                          <Text className="font-bold text-stone-900 dark:text-stone-100 text-base">
-                            {barber.user_id.FirstName} {barber.user_id.LastName}
+              {shop.barbersDetails.map((barber) => (
+                <View key={barber._id} className="bg-white dark:bg-stone-800 rounded-xl p-4">
+                  <View className="flex-row items-center">
+                    <View className="w-14 h-14 bg-primary/20 rounded-full items-center justify-center">
+                      {barber.user_id.profileImage ? (
+                        <ImageBackground
+                          source={{ uri: barber.user_id.profileImage }}
+                          className="w-14 h-14 rounded-full"
+                          imageStyle={{ borderRadius: 28 }}
+                        />
+                      ) : (
+                        <MaterialIcons name="person" size={28} color="#ecb613" />
+                      )}
+                    </View>
+                    <View className="ml-3 flex-1">
+                      <Text className="font-bold text-stone-900 dark:text-stone-100 text-base">
+                        {barber.user_id.FirstName} {barber.user_id.LastName}
+                      </Text>
+                      <Text className="text-sm text-stone-500 dark:text-stone-500 mt-0.5">
+                        {barber.experience} years experience
+                      </Text>
+                      <View className="flex-row flex-wrap gap-1 mt-1">
+                        {barber.specialization.map((spec, idx) => (
+                          <Text key={idx} className="text-xs text-primary">
+                            {spec}{idx < barber.specialization.length - 1 ? ' • ' : ''}
                           </Text>
-                          <Text className="text-sm text-stone-500 dark:text-stone-500 mt-0.5">
-                            {barber.experience} years experience
-                          </Text>
-                          <View className="flex-row flex-wrap gap-1 mt-1">
-                            {barber.specialization.slice(0, 2).map((spec, idx) => (
-                              <Text key={idx} className="text-xs text-primary">
-                                {spec}{idx < Math.min(barber.specialization.length - 1, 1) ? ' • ' : ''}
-                              </Text>
-                            ))}
-                          </View>
-                        </View>
-                        <View className="items-center">
-                          <Text className="text-xs text-stone-500 dark:text-stone-500 mb-1">Available</Text>
-                          <Text className="font-bold text-primary text-base">{availableSlots.length}</Text>
-                          <MaterialIcons 
-                            name={isExpanded ? "expand-less" : "expand-more"} 
-                            size={24} 
-                            color="#ecb613" 
-                          />
-                        </View>
+                        ))}
                       </View>
-                    </TouchableOpacity>
-
-                    {/* Available Slots - Expandable */}
-                    {isExpanded && (
-                      <View className="px-4 pb-4 border-t border-stone-200 dark:border-stone-700 pt-3">
-                        <Text className="text-sm font-semibold text-stone-700 dark:text-stone-300 mb-2">
-                          Available Slots Today
-                        </Text>
-                        <View className="flex-row flex-wrap gap-2">
-                          {availableSlots.length > 0 ? (
-                            availableSlots.map((slot, idx) => (
-                              <TouchableOpacity 
-                                key={idx} 
-                                className="px-4 py-2 rounded-lg bg-stone-100 dark:bg-stone-700 border-2 border-transparent active:border-primary"
-                              >
-                                <Text className="text-sm font-semibold text-stone-900 dark:text-stone-100">
-                                  {slot.time}
-                                </Text>
-                              </TouchableOpacity>
-                            ))
-                          ) : (
-                            <Text className="text-sm text-stone-500 dark:text-stone-500 italic">
-                              No available slots today
-                            </Text>
-                          )}
-                        </View>
-                      </View>
-                    )}
+                    </View>
                   </View>
-                );
-              })}
+                </View>
+              ))}
             </View>
           </View>
         )}
@@ -328,16 +328,18 @@ const BarberDetailScreen = () => {
       </ScrollView>
 
       {/* Footer */}
-      <View className="p-4 bg-background-light/80 dark:bg-background-dark/80">
-      {/* Footer */}
       <View className="p-4 border-t border-stone-200 dark:border-stone-800 bg-background-light dark:bg-background-dark">
-        <TouchableOpacity className="w-full h-14 px-5 rounded-xl bg-primary justify-center items-center shadow-lg">
+        <TouchableOpacity 
+          className="w-full h-14 px-5 rounded-xl bg-primary justify-center items-center shadow-lg"
+          onPress={handleBookAppointment}
+        >
           <View className="flex-row items-center">
             <MaterialIcons name="event" size={20} color="#221d10" />
-            <Text className="font-bold text-stone-900 text-base ml-2">Book Appointment</Text>
+            <Text className="font-bold text-stone-900 text-base ml-2">
+              {selectedServices.length > 0 ? `Book ${selectedServices.length} Service${selectedServices.length > 1 ? 's' : ''}` : 'Select Services'}
+            </Text>
           </View>
         </TouchableOpacity>
-      </View>
       </View>
     </SafeAreaView>
   );

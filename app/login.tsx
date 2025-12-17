@@ -14,12 +14,14 @@ import {
   useColorScheme,
   View,
 } from "react-native";
+import { useAuth } from "./contexts/AuthContext";
 
 // Use your computer's local IP address for Expo testing
-const API_URL = "http://10.20.56.168:5000/api/auth";
+const API_URL = "http://10.107.204.168:5000/api/auth";
 
 const Login: React.FC = () => {
   const router = useRouter();
+  const { login: authLogin } = useAuth();
   const isDark = useColorScheme() === "dark";
 
   const [isSignup, setIsSignup] = useState(false);
@@ -65,10 +67,10 @@ const Login: React.FC = () => {
       const data = await response.json();
 
       if (response.ok) {
-        Alert.alert("Success", data.message);
-        // Store token if needed (e.g., AsyncStorage)
-        console.log("Token:", data.token);
-        console.log("User:", data.user);
+        // Store user and token in auth context
+        console.log("Login response data:", data);
+        await authLogin(data.user, data.token);
+        console.log("User stored in context, navigating to Home...");
         router.push("/screens/Home");
       } else {
         Alert.alert("Error", data.message);

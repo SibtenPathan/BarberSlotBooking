@@ -1,206 +1,418 @@
-import React from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  SafeAreaView,
-  TouchableOpacity,
-  ImageBackground,
-  Alert,
-} from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
+import { format } from "date-fns";
+import { useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+    ActivityIndicator,
+    Alert,
+    RefreshControl,
+    SafeAreaView,
+    ScrollView,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
+import { useAuth } from "../contexts/AuthContext";
 
-/**
- * MyBookingScreen.tsx
- * - Uses nativewind className Tailwind utilities (dark mode class is supported)
- * - No external date libs required
- * - Replace sample data with real data from your backend as needed
- */
-
-type Booking = {
-  id: string;
-  dateISO: string; // ISO string for date/time
-  title: string;
-  shop: string;
-  image: string;
-};
-
-const UPCOMING: Booking[] = [
-  {
-    id: "b1",
-    dateISO: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // tomorrow
-    title: "Classic Cut",
-    shop: "The Barber Shop",
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuBv-7vquDRp6BlfrKeKET5BCFej36EmIQWCRf0csRl4aAuMoztJpCcmIXScJ1nHfZ3AfMBVmqsCPfwhEFYWIfVhlNZ7j0OPxemmB6UkMRuoczIkZgaynwFAzVnKHea00KFIscQWQOGa5dmJ2J6UcB4Tb1tdNevGICOaAfcIMzlTugxQFExBKSDDlDTC76admv0fzDNmBhahsUkoVwJIDON0O2vOXoZIAXScI4qKyXmKomGh94rXST82QIIdyHW_KzhIuccG-4s0bsQo",
-  },
-];
-
-const PAST: Booking[] = [
-  {
-    id: "b2",
-    dateISO: new Date("2024-05-15T10:00:00").toISOString(),
-    title: "Fade",
-    shop: "The Barber Shop",
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuDQ7fENeYcVO2IUIZHrkuVgmnxCDl6dxfIKFERbghB8Lz1LW1U60wROiU-9wCpBDBOxcjbxJ-A71wFMsASCmlYxQH7eEie_RSWyHt1Xfr9R92L7wiWQQ06p_TGFBmMYSoNbUa5E1pEZ6Xizp0PHXL31LJVsQw7NK_SXnIP-kKKm4RFBqkuiZov5wl3SlaBuxPHmQ8CfuTDTA8CUVdczCHJQww17os3HzaV12hVxnyQjBzq3TCZkJ6Q-kfZM6QiGRD-k1NvQChTyW0ul",
-  },
-];
-
-function formatReadable(dateISO: string) {
-  const d = new Date(dateISO);
-  // Example: "Tomorrow, 10:00 AM" or "May 15, 2024"
-  const today = new Date();
-  const diffDays = Math.floor((d.setHours(0,0,0,0) - today.setHours(0,0,0,0)) / (24 * 60 * 60 * 1000));
-  const time = new Date(dateISO).toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  if (diffDays === 0) return `Today, ${time}`;
-  if (diffDays === 1) return `Tomorrow, ${time}`;
-  return `${new Date(dateISO).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+interface Service {
+  _id: string;
+  name: string;
+  description: string;
+  price: number;
+  duration: number;
 }
 
-export default function MyBookingScreen() {
-  function onReschedule(booking: Booking) {
-    Alert.alert("Reschedule", `Reschedule booking: ${booking.title}`, [
-      { text: "OK" },
-    ]);
-  }
+interface Barber {
+  _id: string;
+  user_id: {
+    FirstName: string;
+    LastName: string;
+    profileImage?: string;
+  };
+  experience: number;
+  specialization: string[];
+}
 
-  function onCancel(booking: Booking) {
+interface Shop {
+  _id: string;
+  shopName: string;
+  location: {
+    address: string;
+    city: string;
+    lat: number;
+    long: number;
+  };
+}
+
+interface Booking {
+  _id: string;
+  user_id: string;
+  shop_id: Shop;
+  barber_id: Barber;
+  services: Service[];
+  date: string;
+  slot_time: string;
+  status: "pending" | "confirmed" | "completed" | "cancelled";
+  payment: {
+    method: string;
+    amount: number;
+    status: string;
+  };
+  createdAt: string;
+}
+
+const API_URL = "http://10.107.204.168:5000/api";
+
+export default function MyBookingScreen() {
+  const router = useRouter();
+  const { user } = useAuth();
+  
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<"upcoming" | "past">("upcoming");
+
+  const fetchBookings = useCallback(async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const userId = user._id || (user as any).id;
+      const response = await fetch(`${API_URL}/bookings/user/${userId}`);
+      const data = await response.json();
+
+      if (data.success) {
+        setBookings(data.data);
+      } else {
+        Alert.alert("Error", "Failed to fetch bookings");
+      }
+    } catch (error) {
+      console.error("Error fetching bookings:", error);
+      Alert.alert("Error", "Failed to fetch bookings");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchBookings();
+  }, [fetchBookings]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchBookings();
+  };
+
+  const handleCancelBooking = async (bookingId: string) => {
     Alert.alert(
-      "Cancel booking",
-      `Are you sure you want to cancel "${booking.title}"?`,
+      "Cancel Booking",
+      "Are you sure you want to cancel this booking?",
       [
         { text: "No", style: "cancel" },
         {
-          text: "Yes, cancel",
+          text: "Yes, Cancel",
           style: "destructive",
-          onPress: () => {
-            // TODO: call API to cancel
-            Alert.alert("Canceled", "Your booking has been canceled.");
-          },
-        },
+          onPress: async () => {
+            try {
+              const response = await fetch(`${API_URL}/bookings/${bookingId}/cancel`, {
+                method: "PUT",
+                headers: {
+                  "Content-Type": "application/json"
+                }
+              });
+
+              const data = await response.json();
+
+              if (data.success) {
+                Alert.alert("Success", "Booking cancelled successfully");
+                fetchBookings(); // Refresh list
+              } else {
+                Alert.alert("Error", data.message || "Failed to cancel booking");
+              }
+            } catch (error) {
+              console.error("Error cancelling booking:", error);
+              Alert.alert("Error", "Failed to cancel booking");
+            }
+          }
+        }
       ]
+    );
+  };
+
+  // Separate bookings into upcoming and past
+  const now = new Date();
+  const upcomingBookings = bookings.filter(b => {
+    const bookingDate = new Date(b.date);
+    return bookingDate >= now && b.status !== "cancelled" && b.status !== "completed";
+  });
+  
+  const pastBookings = bookings.filter(b => {
+    const bookingDate = new Date(b.date);
+    return bookingDate < now || b.status === "cancelled" || b.status === "completed";
+  });
+
+  const displayedBookings = activeTab === "upcoming" ? upcomingBookings : pastBookings;
+
+  if (!user) {
+    return (
+      <SafeAreaView className="flex-1 bg-stone-50 dark:bg-stone-900">
+        <View className="flex-row items-center p-4 bg-white dark:bg-stone-800">
+          <TouchableOpacity className="w-10 h-10 items-center justify-center" onPress={() => router.back()}>
+            <MaterialIcons name="arrow-back" size={24} color="#ecb613" />
+          </TouchableOpacity>
+          <Text className="flex-1 text-center text-lg font-bold text-stone-900 dark:text-stone-100 -ml-10">
+            My Bookings
+          </Text>
+        </View>
+        <View className="flex-1 items-center justify-center p-6">
+          <MaterialIcons name="event-busy" size={64} color="#9ca3af" />
+          <Text className="text-stone-900 dark:text-stone-100 text-lg font-semibold mt-4">Please Login</Text>
+          <Text className="text-stone-500 dark:text-stone-400 text-center mt-2">You need to login to view your bookings</Text>
+          <TouchableOpacity
+            onPress={() => router.push("/login")}
+            className="mt-6 bg-primary px-6 py-3 rounded-lg"
+          >
+            <Text className="text-stone-900 font-semibold">Go to Login</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     );
   }
 
-  function onRebook(booking: Booking) {
-    // TODO: navigate to booking flow with prefilled data
-    Alert.alert("Rebook", `Rebooking ${booking.title} at ${booking.shop}`);
+  if (loading) {
+    return (
+      <SafeAreaView className="flex-1 bg-stone-50 dark:bg-stone-900">
+        <View className="flex-row items-center p-4 bg-white dark:bg-stone-800">
+          <TouchableOpacity className="w-10 h-10 items-center justify-center" onPress={() => router.back()}>
+            <MaterialIcons name="arrow-back" size={24} color="#ecb613" />
+          </TouchableOpacity>
+          <Text className="flex-1 text-center text-lg font-bold text-stone-900 dark:text-stone-100 -ml-10">
+            My Bookings
+          </Text>
+        </View>
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" color="#ecb613" />
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-background-light dark:bg-background-dark">
+    <SafeAreaView className="flex-1 bg-stone-50 dark:bg-stone-900">
       {/* Header */}
-      <View className="flex-row items-center p-4">
-        <TouchableOpacity onPress={() => { /* navigation.goBack() */ }} className="w-10 h-10 items-center justify-center">
-          <MaterialIcons name="arrow-back-ios" size={20} color="#111827" />
+      <View className="flex-row items-center p-4 bg-white dark:bg-stone-800">
+        <TouchableOpacity className="w-10 h-10 items-center justify-center" onPress={() => router.back()}>
+          <MaterialIcons name="arrow-back" size={24} color="#ecb613" />
         </TouchableOpacity>
-        <Text className="flex-1 text-center text-lg font-bold text-gray-900 dark:text-white">
-          Bookings
+        <Text className="flex-1 text-center text-lg font-bold text-stone-900 dark:text-stone-100 -ml-10">
+          My Bookings
         </Text>
-        <View className="w-8" />
       </View>
 
-      {/* Content */}
-      <ScrollView className="flex-1 p-4">
-        {/* Upcoming */}
-        <Text className="px-2 pb-2 pt-4 text-xl font-bold text-gray-900 dark:text-white">
-          Upcoming
-        </Text>
+      {/* Tabs */}
+      <View className="flex-row bg-white dark:bg-stone-800 px-4 py-2">
+        <TouchableOpacity
+          onPress={() => setActiveTab("upcoming")}
+          className={`flex-1 py-3 rounded-lg ${
+            activeTab === "upcoming" ? "bg-primary" : "bg-stone-100 dark:bg-stone-700"
+          }`}
+        >
+          <Text className={`text-center font-semibold ${
+            activeTab === "upcoming" ? "text-stone-900" : "text-stone-600 dark:text-stone-300"
+          }`}>
+            Upcoming ({upcomingBookings.length})
+          </Text>
+        </TouchableOpacity>
+        <View className="w-2" />
+        <TouchableOpacity
+          onPress={() => setActiveTab("past")}
+          className={`flex-1 py-3 rounded-lg ${
+            activeTab === "past" ? "bg-primary" : "bg-stone-100 dark:bg-stone-700"
+          }`}
+        >
+          <Text className={`text-center font-semibold ${
+            activeTab === "past" ? "text-stone-900" : "text-stone-600 dark:text-stone-300"
+          }`}>
+            Past ({pastBookings.length})
+          </Text>
+        </TouchableOpacity>
+      </View>
 
-        <View className="space-y-4">
-          {UPCOMING.map((b) => (
-            <View key={b.id} className="flex-row items-stretch gap-4 rounded-xl bg-white dark:bg-black/20 p-4 shadow-sm">
-              <View className="flex-1">
-                <Text className="text-sm text-gray-500 dark:text-gray-400">
-                  {formatReadable(b.dateISO)}
-                </Text>
-                <Text className="text-lg font-bold text-gray-900 dark:text-white mt-1">
-                  {b.title}
-                </Text>
-                <Text className="text-sm text-gray-500 dark:text-gray-400">{b.shop}</Text>
-
-                <View className="mt-4 flex-row gap-2">
-                  <TouchableOpacity
-                    onPress={() => onReschedule(b)}
-                    className="flex-1 rounded-lg bg-gray-200 dark:bg-white/10 px-4 py-2"
-                  >
-                    <Text className="text-sm font-medium text-gray-800 dark:text-white text-center">Reschedule</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={() => onCancel(b)}
-                    className="flex-1 rounded-lg bg-gray-200 dark:bg-white/10 px-4 py-2"
-                  >
-                    <Text className="text-sm font-medium text-gray-800 dark:text-white text-center">Cancel</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <ImageBackground
-                source={{ uri: b.image }}
-                className="w-24 h-24 flex-shrink-0 rounded-lg"
-                imageStyle={{ borderRadius: 12 }}
+      {/* Bookings List */}
+      <ScrollView
+        className="flex-1 p-4"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#ecb613"]} />
+        }
+      >
+        {displayedBookings.length === 0 ? (
+          <View className="items-center justify-center py-20">
+            <MaterialIcons 
+              name={activeTab === "upcoming" ? "event-available" : "history"} 
+              size={64} 
+              color="#9ca3af" 
+            />
+            <Text className="text-stone-900 dark:text-stone-100 text-lg font-semibold mt-4">
+              No {activeTab} bookings
+            </Text>
+            <Text className="text-stone-500 dark:text-stone-400 text-center mt-2">
+              {activeTab === "upcoming" 
+                ? "You don't have any upcoming bookings" 
+                : "You don't have any past bookings"}
+            </Text>
+          </View>
+        ) : (
+          <View className="gap-4">
+            {displayedBookings.map((booking) => (
+              <BookingCard
+                key={booking._id}
+                booking={booking}
+                isUpcoming={activeTab === "upcoming"}
+                onCancel={handleCancelBooking}
               />
-            </View>
-          ))}
-        </View>
-
-        {/* Past */}
-        <Text className="px-2 pb-2 pt-4 text-xl font-bold text-gray-900 dark:text-white">Past</Text>
-
-        <View className="space-y-4 pb-8">
-          {PAST.map((b) => (
-            <View key={b.id} className="flex-row items-stretch gap-4 rounded-xl bg-white dark:bg-black/20 p-4 shadow-sm">
-              <View className="flex-1">
-                <Text className="text-sm text-gray-500 dark:text-gray-400">
-                  {new Date(b.dateISO).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}
-                </Text>
-                <Text className="text-lg font-bold text-gray-900 dark:text-white mt-1">{b.title}</Text>
-                <Text className="text-sm text-gray-500 dark:text-gray-400">{b.shop}</Text>
-
-                <View className="mt-4">
-                  <TouchableOpacity
-                    onPress={() => onRebook(b)}
-                    className="w-full rounded-lg bg-primary px-4 py-2"
-                  >
-                    <Text className="text-sm font-bold text-black text-center">Rebook</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <ImageBackground
-                source={{ uri: b.image }}
-                className="w-24 h-24 flex-shrink-0 rounded-lg"
-                imageStyle={{ borderRadius: 12 }}
-              />
-            </View>
-          ))}
-        </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
+    </SafeAreaView>
+  );
+}
 
-      {/* Footer / Nav */}
-      <View className="sticky bottom-0 bg-background-light/80 dark:bg-background-dark/80 border-t border-gray-200 dark:border-white/10">
-        <View className="flex-row justify-around p-2">
-          <TouchableOpacity className="flex flex-col items-center gap-1 p-2" onPress={() => { /* navigate to home */ }}>
-            <MaterialIcons name="home" size={22} color="#6b7280" />
-            <Text className="text-xs font-medium text-gray-500 dark:text-gray-400">Home</Text>
-          </TouchableOpacity>
+// Booking Card Component
+function BookingCard({ 
+  booking, 
+  isUpcoming,
+  onCancel 
+}: { 
+  booking: Booking; 
+  isUpcoming: boolean;
+  onCancel: (id: string) => void;
+}) {
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "confirmed":
+        return "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300";
+      case "pending":
+        return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300";
+      case "completed":
+        return "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300";
+      case "cancelled":
+        return "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300";
+      default:
+        return "bg-stone-100 dark:bg-stone-700 text-stone-700 dark:text-stone-300";
+    }
+  };
 
-          <TouchableOpacity className="flex flex-col items-center gap-1 p-2" onPress={() => { /* already here */ }}>
-            <MaterialIcons name="calendar-month" size={22} color="#ecb613" />
-            <Text className="text-xs font-medium text-primary">Bookings</Text>
-          </TouchableOpacity>
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "confirmed":
+        return "check-circle";
+      case "pending":
+        return "schedule";
+      case "completed":
+        return "done-all";
+      case "cancelled":
+        return "cancel";
+      default:
+        return "info";
+    }
+  };
 
-          <TouchableOpacity className="flex flex-col items-center gap-1 p-2" onPress={() => { /* navigate to profile */ }}>
-            <MaterialIcons name="person" size={22} color="#6b7280" />
-            <Text className="text-xs font-medium text-gray-500 dark:text-gray-400">Profile</Text>
-          </TouchableOpacity>
+  return (
+    <View className="bg-white dark:bg-stone-800 rounded-xl p-4 shadow-sm">
+      {/* Status Badge */}
+      <View className="flex-row items-center justify-between mb-3">
+        <View className={`flex-row items-center px-3 py-1 rounded-full ${getStatusColor(booking.status)}`}>
+          <MaterialIcons name={getStatusIcon(booking.status) as any} size={16} />
+          <Text className={`ml-1 text-xs font-semibold uppercase ${getStatusColor(booking.status)}`}>
+            {booking.status}
+          </Text>
+        </View>
+        <Text className="text-xs text-stone-500 dark:text-stone-400">
+          #{booking._id.slice(-6)}
+        </Text>
+      </View>
+
+      {/* Shop Name */}
+      <Text className="text-lg font-bold text-stone-900 dark:text-stone-100 mb-1">
+        {booking.shop_id.shopName}
+      </Text>
+      <Text className="text-sm text-stone-500 dark:text-stone-400 mb-3">
+        <MaterialIcons name="location-on" size={14} /> {booking.shop_id.location.address}, {booking.shop_id.location.city}
+      </Text>
+
+      {/* Date and Time */}
+      <View className="flex-row items-center mb-3">
+        <View className="flex-1 flex-row items-center">
+          <MaterialIcons name="calendar-today" size={16} color="#ecb613" />
+          <Text className="ml-2 text-stone-700 dark:text-stone-300">
+            {format(new Date(booking.date), "MMM d, yyyy")}
+          </Text>
+        </View>
+        <View className="flex-1 flex-row items-center">
+          <MaterialIcons name="access-time" size={16} color="#ecb613" />
+          <Text className="ml-2 text-stone-700 dark:text-stone-300">
+            {booking.slot_time}
+          </Text>
         </View>
       </View>
-    </SafeAreaView>
+
+      {/* Barber */}
+      <View className="flex-row items-center mb-3">
+        <MaterialIcons name="person" size={16} color="#ecb613" />
+        <Text className="ml-2 text-stone-700 dark:text-stone-300">
+          {booking.barber_id.user_id.FirstName} {booking.barber_id.user_id.LastName}
+        </Text>
+        <Text className="ml-2 text-xs text-stone-500 dark:text-stone-400">
+          ({booking.barber_id.experience}y exp)
+        </Text>
+      </View>
+
+      {/* Services */}
+      <View className="mb-3">
+        <Text className="text-sm font-semibold text-stone-700 dark:text-stone-300 mb-1">Services:</Text>
+        {booking.services.map((service, idx) => (
+          <View key={service._id} className="flex-row items-center justify-between py-1">
+            <Text className="text-sm text-stone-600 dark:text-stone-400">• {service.name}</Text>
+            <Text className="text-sm text-stone-600 dark:text-stone-400">${service.price}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Payment */}
+      <View className="border-t border-stone-200 dark:border-stone-700 pt-3 mb-3">
+        <View className="flex-row items-center justify-between">
+          <Text className="text-sm font-semibold text-stone-700 dark:text-stone-300">Total Amount:</Text>
+          <Text className="text-lg font-bold text-primary">${booking.payment.amount}</Text>
+        </View>
+        <View className="flex-row items-center justify-between mt-1">
+          <Text className="text-xs text-stone-500 dark:text-stone-400">Payment Method:</Text>
+          <Text className="text-xs text-stone-600 dark:text-stone-400 uppercase">{booking.payment.method}</Text>
+        </View>
+        <View className="flex-row items-center justify-between mt-1">
+          <Text className="text-xs text-stone-500 dark:text-stone-400">Payment Status:</Text>
+          <Text className={`text-xs font-semibold uppercase ${
+            booking.payment.status === "paid" 
+              ? "text-green-600 dark:text-green-400" 
+              : "text-yellow-600 dark:text-yellow-400"
+          }`}>
+            {booking.payment.status}
+          </Text>
+        </View>
+      </View>
+
+      {/* Actions */}
+      {isUpcoming && booking.status !== "cancelled" && (
+        <TouchableOpacity
+          onPress={() => onCancel(booking._id)}
+          className="bg-red-500 py-3 rounded-lg"
+        >
+          <Text className="text-white text-center font-semibold">Cancel Booking</Text>
+        </TouchableOpacity>
+      )}
+    </View>
   );
 }

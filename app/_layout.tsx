@@ -1,8 +1,8 @@
 import { Stack } from 'expo-router';
-import { useFonts, Manrope_400Regular, Manrope_700Bold } from '@expo-google-fonts/manrope';
-import { useState, useEffect } from 'react';
-import Splash from './screens/Splash';
+import { useEffect, useState } from 'react';
 import "../global.css";
+import { AuthProvider } from './contexts/AuthContext';
+import Splash from './screens/Splash';
 
 export default function RootLayout() {
   const [showSplash, setShowSplash] = useState(true);
@@ -22,7 +22,8 @@ export default function RootLayout() {
   }
 
   return (
-    <Stack>
+    <AuthProvider>
+      <Stack>
       <Stack.Screen name="index" options={{ title: 'Home' }} />
       <Stack.Screen name="about" options={{ title: 'About' }} />
       <Stack.Screen name="login" options={{ title: 'Login' }} />
@@ -36,5 +37,6 @@ export default function RootLayout() {
       <Stack.Screen name="Payment History" options={{ title: 'Payment History' }} />
       <Stack.Screen name="Chat Screen" options={{ title: 'Chat Screen' }} />
     </Stack>
+    </AuthProvider>
   );
 }

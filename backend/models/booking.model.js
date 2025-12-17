@@ -23,12 +23,12 @@ const bookingSchema = new mongoose.Schema(
       required: true
     },
 
-    // Selected service
-    service_id: {
+    // Selected services (can be multiple)
+    services: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: "Service",
       required: true
-    },
+    }],
 
     // Booking date
     date: {

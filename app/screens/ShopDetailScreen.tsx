@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, ImageBackground, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const API_URL = "http://10.107.204.168:5000/api";
+const API_URL = "http://10.153.87.168:5000/api";
 
 interface Slot {
   time: string;

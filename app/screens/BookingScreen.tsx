@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
+  Dimensions,
   ImageBackground,
   SafeAreaView,
   ScrollView,
@@ -12,6 +13,11 @@ import {
   View,
 } from "react-native";
 import { useAuth } from "../contexts/AuthContext";
+import {
+  calculateTotalDuration,
+  getAvailableStartSlots,
+  getSlotDisplayInfo
+} from "../utils/slotHelper";
 
 interface Service {
   _id: string;
@@ -40,7 +46,10 @@ interface Barber {
   }[];
 }
 
-const API_URL = "http://10.107.204.168:5000/api";
+const API_URL = "http://10.153.87.168:5000/api";
+const { width } = Dimensions.get("window");
+// Calculate width for 3 columns: screen width - padding (64px) - gaps (24px for 2 gaps)
+const SLOT_CARD_WIDTH = (width - 88) / 3;
 
 export default function BookingScreen() {
   const router = useRouter();
@@ -98,14 +107,23 @@ export default function BookingScreen() {
 
   const selectedBarber = barbers.find(b => b._id === selectedBarberId);
   
+  // Calculate total duration of all selected services
+  const totalDuration = calculateTotalDuration(services);
+  
   // Find slots for selected date
   const selectedDateStr = selectedDate.toDateString();
   const dateAvailability = selectedBarber?.availability.find(
     av => new Date(av.date).toDateString() === selectedDateStr
   );
-  // Show all slots (both available and booked) so user can see what's taken
+  
+  // Get all slots for the day
   const allSlots = dateAvailability?.slots || [];
-  const availableSlots = allSlots.filter(s => !s.isBooked);
+  
+  // Get slots that can accommodate the full service duration
+  const availableStartSlots = getAvailableStartSlots(allSlots, totalDuration);
+  
+  // For display purposes, show all slots with their status
+  const displaySlots = allSlots;
   
   // Generate calendar days (30 days from today)
   const calendarDays = Array.from({ length: 30 }).map((_, i) => {
@@ -207,6 +225,58 @@ export default function BookingScreen() {
     }
   };
 
+  // Slot Status Legend Component
+  const SlotLegend = () => (
+    <View className="mb-4">
+      <View className="bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 p-3 rounded-r-lg mb-3">
+        <View className="flex-row items-center mb-1">
+          <MaterialIcons name="info" size={18} color="#3b82f6" />
+          <Text className="ml-2 text-blue-800 dark:text-blue-300 font-medium">
+            Service Duration: {totalDuration} minutes
+          </Text>
+        </View>
+        <Text className="text-blue-600 dark:text-blue-400 text-xs">
+          Only showing slots with {Math.ceil(totalDuration / 15)} consecutive 15-min blocks available
+        </Text>
+      </View>
+      
+      <Text className="text-sm font-medium text-stone-600 dark:text-stone-400 mb-2">
+        Slot Status Legend
+      </Text>
+      <View className="flex-row flex-wrap gap-2">
+        <View className="flex-row items-center mr-4">
+          <View className="w-3 h-3 rounded-full bg-green-500 mr-2" />
+          <Text className="text-xs text-stone-600 dark:text-stone-400">Can start here</Text>
+        </View>
+        <View className="flex-row items-center mr-4">
+          <View className="w-3 h-3 rounded-full bg-primary mr-2" />
+          <Text className="text-xs text-stone-600 dark:text-stone-400">Selected</Text>
+        </View>
+        <View className="flex-row items-center">
+          <View className="w-3 h-3 rounded-full bg-stone-400 mr-2" />
+          <Text className="text-xs text-stone-600 dark:text-stone-400">Insufficient time</Text>
+        </View>
+      </View>
+    </View>
+  );
+
+  // Slot Counter Component
+  const SlotCounter = () => (
+    <View className="flex-row justify-between items-center mb-3">
+      <Text className="text-base font-bold text-stone-900 dark:text-stone-100">
+        Select Time Slot - {format(selectedDate, "MMM d, yyyy")}
+      </Text>
+      <View className="flex-row items-center bg-stone-100 dark:bg-stone-800 px-3 py-1 rounded-full">
+        <Text className="text-sm font-medium text-stone-700 dark:text-stone-300">
+          <Text className="text-green-600 dark:text-green-400">{availableStartSlots.length}</Text>
+          <Text className="text-stone-500"> / </Text>
+          <Text className="text-stone-700 dark:text-stone-300">{displaySlots.length}</Text>
+          <Text className="text-stone-500"> slots</Text>
+        </Text>
+      </View>
+    </View>
+  );
+
   return (
     <SafeAreaView className="flex-1 bg-stone-50 dark:bg-stone-900">
       {/* Header */}
@@ -225,7 +295,7 @@ export default function BookingScreen() {
           {/* Selected Services */}
           <View>
             <Text className="text-base font-bold text-stone-900 dark:text-stone-100 mb-3">Selected Services</Text>
-            <View className="bg-white dark:bg-stone-800 rounded-xl p-4 gap-2">
+            <View className="bg-white dark:bg-stone-800 rounded-xl p-4 gap-2 shadow-sm">
               {services.map((service) => (
                 <View key={service._id} className="flex-row justify-between items-center">
                   <View className="flex-1">
@@ -255,11 +325,11 @@ export default function BookingScreen() {
                       setSelectedBarberId(barber._id);
                       setSelectedTime(null); // Reset time when barber changes
                     }}
-                    className={`items-center w-24 mr-2 p-3 rounded-xl ${
+                    className={`items-center w-24 mr-2 p-3 rounded-xl shadow-sm ${
                       active ? "bg-primary/20 border-2 border-primary" : "bg-white dark:bg-stone-800"
                     }`}
                   >
-                    <View className="w-16 h-16 bg-primary/20 rounded-full items-center justify-center mb-2">
+                    <View className="w-16 h-16 bg-primary/20 rounded-full items-center justify-center mb-2 shadow">
                       {barber.user_id.profileImage ? (
                         <ImageBackground
                           source={{ uri: barber.user_id.profileImage }}
@@ -284,7 +354,7 @@ export default function BookingScreen() {
           {selectedBarberId && (
             <View>
               <Text className="text-base font-bold text-stone-900 dark:text-stone-100 mb-3">Select Date</Text>
-              <View className="bg-white dark:bg-stone-800 rounded-xl p-4">
+              <View className="bg-white dark:bg-stone-800 rounded-xl p-4 shadow-sm">
                 <View className="flex-row items-center justify-between mb-3">
                   <TouchableOpacity
                     onPress={() => {
@@ -295,7 +365,7 @@ export default function BookingScreen() {
                         setSelectedTime(null);
                       }
                     }}
-                    className="w-8 h-8 items-center justify-center rounded-full"
+                    className="w-8 h-8 items-center justify-center rounded-full bg-stone-100 dark:bg-stone-700"
                   >
                     <MaterialIcons name="chevron-left" size={24} color="#ecb613" />
                   </TouchableOpacity>
@@ -315,7 +385,7 @@ export default function BookingScreen() {
                         setSelectedTime(null);
                       }
                     }}
-                    className="w-8 h-8 items-center justify-center rounded-full"
+                    className="w-8 h-8 items-center justify-center rounded-full bg-stone-100 dark:bg-stone-700"
                   >
                     <MaterialIcons name="chevron-right" size={24} color="#ecb613" />
                   </TouchableOpacity>
@@ -331,7 +401,7 @@ export default function BookingScreen() {
                           setSelectedDate(day);
                           setSelectedTime(null);
                         }}
-                        className={`w-14 h-14 mr-3 rounded-full items-center justify-center ${
+                        className={`w-14 h-14 mr-3 rounded-full items-center justify-center shadow ${
                           isSelected ? "bg-primary" : "bg-stone-100 dark:bg-stone-700"
                         }`}
                       >
@@ -352,49 +422,107 @@ export default function BookingScreen() {
           {/* Select Time Slot */}
           {selectedBarberId && selectedDate && (
             <View>
-              <Text className="text-base font-bold text-stone-900 dark:text-stone-100 mb-3">
-                Select Time Slot - {format(selectedDate, "MMM d, yyyy")}
-              </Text>
-              <View className="bg-white dark:bg-stone-800 rounded-xl p-4">
-                {allSlots.length > 0 ? (
-                  <View className="flex-row flex-wrap gap-2">
-                    {allSlots.map((slot, idx) => {
-                      const active = slot.time === selectedTime;
-                      const isBooked = slot.isBooked;
-                      return (
-                        <TouchableOpacity
-                          key={idx}
-                          onPress={() => !isBooked && setSelectedTime(slot.time)}
-                          disabled={isBooked}
-                          className={`px-4 py-3 rounded-lg border-2 ${
-                            isBooked
-                              ? "bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700 opacity-50"
-                              : active 
-                              ? "bg-primary border-primary" 
-                              : "bg-stone-50 dark:bg-stone-700 border-stone-200 dark:border-stone-600"
-                          }`}
-                        >
-                          <Text className={`text-sm font-semibold ${
-                            isBooked 
-                              ? "text-red-600 dark:text-red-400 line-through" 
-                              : active 
-                              ? "text-stone-900" 
-                              : "text-stone-700 dark:text-stone-300"
-                          }`}>
-                            {slot.time}
+              <SlotCounter />
+              <SlotLegend />
+              
+              <View className="bg-white dark:bg-stone-800 rounded-xl p-4 shadow-sm">
+                {displaySlots.length > 0 ? (
+                  <>
+                    {availableStartSlots.length === 0 && displaySlots.length > 0 && (
+                      <View className="mb-4 bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 p-3 rounded-r-lg">
+                        <View className="flex-row items-center">
+                          <MaterialIcons name="warning" size={20} color="#f59e0b" />
+                          <Text className="ml-2 text-amber-800 dark:text-amber-300 font-medium">
+                            No slots available for {totalDuration} minute service
                           </Text>
-                          {isBooked && (
-                            <Text className="text-xs text-red-600 dark:text-red-400 mt-1">Booked</Text>
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
+                        </View>
+                        <Text className="text-amber-600 dark:text-amber-400 text-sm mt-1">
+                          Please select another date or choose a different barber
+                        </Text>
+                      </View>
+                    )}
+                    
+                    <View className="flex-row flex-wrap gap-3">
+                      {displaySlots.map((slot, idx) => {
+                        const isSelected = slot.time === selectedTime;
+                        const canStartHere = availableStartSlots.some(s => s.time === slot.time);
+                        const slotInfo = getSlotDisplayInfo(slot, selectedTime, totalDuration);
+                        
+                        return (
+                          <TouchableOpacity
+                            key={idx}
+                            onPress={() => canStartHere && setSelectedTime(slot.time)}
+                            disabled={!canStartHere}
+                            style={{ width: SLOT_CARD_WIDTH }}
+                            className={`p-3 rounded-xl border-2 shadow-sm ${
+                              isSelected
+                                ? "bg-primary border-primary shadow-md" 
+                                : canStartHere
+                                ? "bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700"
+                                : "bg-stone-100 dark:bg-stone-700/50 border-stone-300 dark:border-stone-600 opacity-50"
+                            }`}
+                          >
+                            <View className="items-center">
+                              {/* Icon based on status */}
+                              <MaterialIcons 
+                                name={
+                                  isSelected ? "check-circle" :
+                                  canStartHere ? "access-time" : 
+                                  "block"
+                                } 
+                                size={20} 
+                                color={
+                                  isSelected ? "#221d10" :
+                                  canStartHere ? "#16a34a" : 
+                                  "#9ca3af"
+                                }
+                              />
+                              
+                              {/* Time */}
+                              <Text className={`text-sm font-bold mt-1 ${
+                                isSelected 
+                                  ? "text-stone-900" 
+                                  : canStartHere
+                                  ? "text-green-700 dark:text-green-400"
+                                  : "text-stone-400 dark:text-stone-500"
+                              }`}>
+                                {slotInfo.displayTime}
+                              </Text>
+                              
+                              {/* Status Badge */}
+                              <View className={`mt-1 px-2 py-0.5 rounded-full ${
+                                isSelected 
+                                  ? "bg-primary/20" 
+                                  : canStartHere
+                                  ? "bg-green-100 dark:bg-green-900/40"
+                                  : "bg-stone-200 dark:bg-stone-700"
+                              }`}>
+                                <Text className={`text-xs font-medium ${
+                                  isSelected 
+                                    ? "text-stone-900" 
+                                    : canStartHere
+                                    ? "text-green-700 dark:text-green-300"
+                                    : "text-stone-500 dark:text-stone-400"
+                                }`}>
+                                  {isSelected ? "SELECTED" : canStartHere ? "START" : "FULL"}
+                                </Text>
+                              </View>
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
                 ) : (
-                  <Text className="text-stone-500 dark:text-stone-400 text-center py-4">No slots available for this date</Text>
-                )}
-                {availableSlots.length === 0 && allSlots.length > 0 && (
-                  <Text className="text-red-600 dark:text-red-400 text-center py-2 text-sm">All slots are booked for this date</Text>
+                  <View className="py-8 items-center">
+                    <MaterialIcons name="schedule" size={48} color="#9ca3af" />
+                    <Text className="text-lg font-medium text-stone-500 dark:text-stone-400 mt-3">
+                      No Slots Available
+                    </Text>
+                    <Text className="text-stone-400 dark:text-stone-500 text-center mt-2">
+                      This barber has no working hours scheduled for this date.
+                    </Text>
+                  </View>
                 )}
               </View>
             </View>
@@ -403,7 +531,7 @@ export default function BookingScreen() {
           {/* Payment Summary */}
           <View>
             <Text className="text-base font-bold text-stone-900 dark:text-stone-100 mb-3">Payment Summary</Text>
-            <View className="bg-white dark:bg-stone-800 rounded-xl p-4 gap-2">
+            <View className="bg-white dark:bg-stone-800 rounded-xl p-4 gap-2 shadow-sm">
               {services.map((service) => (
                 <View key={service._id} className="flex-row justify-between">
                   <Text className="text-stone-600 dark:text-stone-400">{service.name}</Text>
@@ -427,7 +555,7 @@ export default function BookingScreen() {
       </ScrollView>
 
       {/* Footer / Confirm */}
-      <View className="absolute bottom-0 left-0 right-0 bg-white dark:bg-stone-800 border-t border-stone-200 dark:border-stone-700">
+      <View className="absolute bottom-0 left-0 right-0 bg-white dark:bg-stone-800 border-t border-stone-200 dark:border-stone-700 shadow-lg">
         <View className="p-4">
           <TouchableOpacity
             onPress={handleConfirmBooking}

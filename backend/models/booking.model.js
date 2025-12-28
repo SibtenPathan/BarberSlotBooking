@@ -36,9 +36,21 @@ const bookingSchema = new mongoose.Schema(
       required: true
     },
 
-    // Slot time
+    // Slot time (start time in 24-hour format)
     slot_time: {
-      type: String, // e.g. "10:30 AM"
+      type: String, // e.g. "10:30"
+      required: true
+    },
+
+    // End time calculated based on service duration
+    slot_end_time: {
+      type: String, // e.g. "11:15"
+      required: true
+    },
+
+    // Total duration of all services in minutes
+    total_duration: {
+      type: Number,
       required: true
     },
 

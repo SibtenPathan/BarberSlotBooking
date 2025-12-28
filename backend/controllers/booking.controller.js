@@ -1,5 +1,12 @@
 import Barber from "../models/barber.model.js";
 import Booking from "../models/booking.model.js";
+import Service from "../models/service.model.js";
+import {
+  addMinutesToTime,
+  convertTo24Hour,
+  getSlotsToBook,
+  hasConsecutiveSlots
+} from "../utils/slotHelper.js";
 
 // Create new booking
 export const createBooking = async (req, res) => {
@@ -31,6 +38,18 @@ export const createBooking = async (req, res) => {
       });
     }
 
+    // Get service details to calculate total duration
+    const serviceDetails = await Service.find({ _id: { $in: services } });
+    if (!serviceDetails || serviceDetails.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Services not found"
+      });
+    }
+
+    // Calculate total duration
+    const totalDuration = serviceDetails.reduce((sum, service) => sum + service.duration, 0);
+
     // Find the availability for the requested date
     const requestedDate = new Date(date);
     const dateAvailability = barber.availability.find(
@@ -44,30 +63,39 @@ export const createBooking = async (req, res) => {
       });
     }
 
-    // Find the specific slot
-    const slot = dateAvailability.slots.find(s => s.time === slot_time);
-    if (!slot) {
+    // Convert slot_time to 24-hour format if needed
+    let slotTime24h = slot_time;
+    if (slot_time.includes('AM') || slot_time.includes('PM')) {
+      slotTime24h = convertTo24Hour(slot_time);
+    }
+
+    // Check if barber has consecutive available slots for the total duration
+    const hasAvailability = hasConsecutiveSlots(
+      dateAvailability.slots,
+      slotTime24h,
+      totalDuration
+    );
+
+    if (!hasAvailability) {
       return res.status(400).json({
         success: false,
-        message: "Slot not found"
+        message: `No consecutive slots available for ${totalDuration} minutes starting at ${slot_time}`
       });
     }
 
-    if (slot.isBooked) {
-      return res.status(400).json({
-        success: false,
-        message: "This slot is already booked"
-      });
-    }
+    // Calculate end time
+    const slotEndTime = addMinutesToTime(slotTime24h, totalDuration);
 
     // Create a single booking with all services
     const booking = new Booking({
       user_id,
       shop_id,
       barber_id,
-      services, // Array of service IDs
+      services,
       date: requestedDate,
-      slot_time,
+      slot_time: slotTime24h,
+      slot_end_time: slotEndTime,
+      total_duration: totalDuration,
       payment: payment || {
         method: "cash",
         amount: 0,
@@ -77,8 +105,17 @@ export const createBooking = async (req, res) => {
 
     await booking.save();
 
-    // Mark the slot as booked
-    slot.isBooked = true;
+    // Mark all required consecutive slots as booked
+    const slotsToBook = getSlotsToBook(dateAvailability.slots, slotTime24h, totalDuration);
+    
+    slotsToBook.forEach(slotTime => {
+      const slot = dateAvailability.slots.find(s => s.time === slotTime);
+      if (slot) {
+        slot.isBooked = true;
+        slot.bookingId = booking._id;
+      }
+    });
+
     await barber.save();
 
     res.status(201).json({
@@ -228,7 +265,7 @@ export const cancelBooking = async (req, res) => {
     booking.status = "cancelled";
     await booking.save();
 
-    // Free up the slot
+    // Free up all slots used by this booking
     const barber = await Barber.findById(booking.barber_id);
     if (barber) {
       const dateAvailability = barber.availability.find(
@@ -236,11 +273,23 @@ export const cancelBooking = async (req, res) => {
       );
 
       if (dateAvailability) {
-        const slot = dateAvailability.slots.find(s => s.time === booking.slot_time);
-        if (slot) {
-          slot.isBooked = false;
-          await barber.save();
-        }
+        // Get all slots that were booked for this booking
+        const slotsToBook = getSlotsToBook(
+          dateAvailability.slots,
+          booking.slot_time,
+          booking.total_duration
+        );
+
+        // Free up each slot
+        slotsToBook.forEach(slotTime => {
+          const slot = dateAvailability.slots.find(s => s.time === slotTime);
+          if (slot && slot.bookingId && slot.bookingId.toString() === booking._id.toString()) {
+            slot.isBooked = false;
+            slot.bookingId = null;
+          }
+        });
+
+        await barber.save();
       }
     }
 

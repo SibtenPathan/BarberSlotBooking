@@ -61,7 +61,7 @@ interface Booking {
   createdAt: string;
 }
 
-const API_URL = "http://10.107.204.168:5000/api";
+const API_URL = "http://10.153.87.168:5000/api";
 
 export default function MyBookingScreen() {
   const router = useRouter();

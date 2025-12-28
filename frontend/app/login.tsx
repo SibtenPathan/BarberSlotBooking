@@ -2,22 +2,22 @@ import { FontAwesome5, MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  SafeAreaView,
-  ScrollView,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  useColorScheme,
-  View,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform,
+    SafeAreaView,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    useColorScheme,
+    View,
 } from "react-native";
 import { useAuth } from "./contexts/AuthContext";
 
 // Use your computer's local IP address for Expo testing
-const API_URL = "http://10.107.204.168:5000/api/auth";
+const API_URL = "http://10.153.87.168:5000/api/auth";
 
 const Login: React.FC = () => {
   const router = useRouter();

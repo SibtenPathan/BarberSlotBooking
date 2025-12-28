@@ -3,6 +3,7 @@ import express from "express";
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/auth.routes.js";
 import barberRoutes from "./routes/barber.routes.js";
+import barberAvailabilityRoutes from "./routes/barberAvailability.routes.js";
 import bookingRoutes from "./routes/booking.routes.js";
 import serviceRoutes from "./routes/service.routes.js";
 import shopRoutes from "./routes/shop.routes.js";
@@ -19,6 +20,7 @@ connectDB();
 app.use("/api/auth", authRoutes);
 app.use("/api/shops", shopRoutes);
 app.use("/api/barbers", barberRoutes);
+app.use("/api/barber-availability", barberAvailabilityRoutes);
 app.use("/api/services", serviceRoutes);
 app.use("/api/bookings", bookingRoutes);
 

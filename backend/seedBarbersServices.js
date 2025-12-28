@@ -4,6 +4,7 @@ import Barber from "./models/barber.model.js";
 import Service from "./models/service.model.js";
 import Shop from "./models/shop.model.js";
 import User from "./models/user.model.js";
+import { generate15MinuteSlots } from "./utils/slotHelper.js";
 
 dotenv.config();
 
@@ -29,36 +30,85 @@ const seedBarbersAndServices = async () => {
       return;
     }
 
-    // Clear existing barbers and services
+    // Clear existing barbers, services, and barber users
     await Barber.deleteMany({});
     await Service.deleteMany({});
-    console.log("Cleared existing barbers and services");
+    await User.deleteMany({ email: { $regex: /^barber\d+@barbershop\.com$/ } });
+    console.log("Cleared existing barbers, services, and barber users");
 
-    // Generate time slots for today and next 7 days
+    // Generate 15-minute time slots for next 7 days
     const generateSlots = () => {
       const slots = [];
-      const times = [
-        "09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM",
-        "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM",
-        "05:00 PM", "06:00 PM", "07:00 PM", "08:00 PM"
-      ];
       
-      for (let i = 0; i < 7; i++) {
+      for (let i = 0; i < 30; i++) { // 30 days
         const date = new Date();
         date.setDate(date.getDate() + i);
         date.setHours(0, 0, 0, 0);
         
+        // Generate 15-minute slots from 09:00 to 18:00
+        const timeSlots = generate15MinuteSlots("09:00", "18:00");
+        
         slots.push({
           date: date,
-          slots: times.map(time => ({
-            time: time,
-            isBooked: Math.random() > 0.7 // 30% chance of being booked
+          slots: timeSlots.map(time => ({
+            time: time, // 24-hour format: "09:00", "09:15", etc.
+            isBooked: false,
+            bookingId: null
           }))
         });
       }
       
       return slots;
     };
+
+    // Define working hours configurations for different barber types
+    const workingHoursTemplates = [
+      // Full-time barber (Mon-Sat, 9am-6pm)
+      {
+        workingDays: [1, 2, 3, 4, 5, 6],
+        dailySchedule: [],
+        defaultStart: "09:00",
+        defaultEnd: "18:00"
+      },
+      // Part-time morning barber (Mon-Fri, 9am-1pm)
+      {
+        workingDays: [1, 2, 3, 4, 5],
+        dailySchedule: [
+          { dayOfWeek: 1, shifts: [{ startTime: "09:00", endTime: "13:00" }] },
+          { dayOfWeek: 2, shifts: [{ startTime: "09:00", endTime: "13:00" }] },
+          { dayOfWeek: 3, shifts: [{ startTime: "09:00", endTime: "13:00" }] },
+          { dayOfWeek: 4, shifts: [{ startTime: "09:00", endTime: "13:00" }] },
+          { dayOfWeek: 5, shifts: [{ startTime: "09:00", endTime: "13:00" }] }
+        ],
+        defaultStart: "09:00",
+        defaultEnd: "13:00"
+      },
+      // Part-time evening barber (Mon-Sat, 2pm-8pm)
+      {
+        workingDays: [1, 2, 3, 4, 5, 6],
+        dailySchedule: [
+          { dayOfWeek: 1, shifts: [{ startTime: "14:00", endTime: "20:00" }] },
+          { dayOfWeek: 2, shifts: [{ startTime: "14:00", endTime: "20:00" }] },
+          { dayOfWeek: 3, shifts: [{ startTime: "14:00", endTime: "20:00" }] },
+          { dayOfWeek: 4, shifts: [{ startTime: "14:00", endTime: "20:00" }] },
+          { dayOfWeek: 5, shifts: [{ startTime: "14:00", endTime: "20:00" }] },
+          { dayOfWeek: 6, shifts: [{ startTime: "14:00", endTime: "20:00" }] }
+        ],
+        defaultStart: "14:00",
+        defaultEnd: "20:00"
+      },
+      // Weekend specialist (Fri-Sun, 10am-7pm)
+      {
+        workingDays: [5, 6, 0],
+        dailySchedule: [
+          { dayOfWeek: 5, shifts: [{ startTime: "10:00", endTime: "19:00" }] },
+          { dayOfWeek: 6, shifts: [{ startTime: "10:00", endTime: "19:00" }] },
+          { dayOfWeek: 0, shifts: [{ startTime: "10:00", endTime: "19:00" }] }
+        ],
+        defaultStart: "10:00",
+        defaultEnd: "19:00"
+      }
+    ];
 
     // Create barber users for each shop
     const barberUsers = [];
@@ -101,12 +151,16 @@ const seedBarbersAndServices = async () => {
     
     for (const shop of shops) {
       for (let i = 0; i < 3; i++) {
+        // Assign different working hour templates to create variety
+        const workingHoursTemplate = workingHoursTemplates[barberUserIndex % workingHoursTemplates.length];
+        
         const barber = new Barber({
           user_id: barberUsers[barberUserIndex]._id,
           shop_id: shop._id,
           experience: Math.floor(Math.random() * 10) + 1,
           specialization: specializations[barberUserIndex % specializations.length],
           profile_image: barberUsers[barberUserIndex].profileImage,
+          workingHours: workingHoursTemplate,
           availability: generateSlots()
         });
         
@@ -116,7 +170,7 @@ const seedBarbersAndServices = async () => {
       }
     }
     
-    console.log(`Created ${barbers.length} barbers`);
+    console.log(`Created ${barbers.length} barbers with varied working hours`);
 
     // Create services for each shop
     const serviceTemplates = [

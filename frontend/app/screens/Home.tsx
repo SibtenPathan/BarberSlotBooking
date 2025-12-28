@@ -5,7 +5,7 @@ import { ActivityIndicator, Alert, ImageBackground, RefreshControl, SafeAreaView
 
 const categories = ["Men's Cut", "Beard Trim", "Hair Styling"];
 
-const API_URL = "http://10.107.204.168:5000/api";
+const API_URL = "http://10.153.87.168:5000/api";
 
 interface Shop {
   _id: string;
